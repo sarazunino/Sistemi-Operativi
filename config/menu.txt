@@ -1,0 +1,11 @@
+# Sintassi di esempio (da definire meglio nella relazione):
+# tipo;nome;prezzo
+PRIMO;Pasta al pomodoro;350
+PRIMO;Risotto ai funghi;380
+SECONDO;Pollo arrosto;450
+SECONDO;Frittata;400
+DOLCE;Tiramisu;150
+CAFFE;Normale;100
+CAFFE;Macchiato;110
+CAFFE;Decaffeinato;110
+CAFFE;Ginseng;120
