@@ -1,6 +1,5 @@
 #include "common.h"
 #include "ipc_utils.h"
-#include "logger.h"
 
 #include <stdio.h>
 #include <stdlib.h>

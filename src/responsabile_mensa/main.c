@@ -11,14 +11,10 @@
 #include <errno.h>
 
 int main(int argc, char *argv[]) {
-    const char *config_path = (argc > 1) ? argv[1] : "config.conf";
+    const char *config_path = (argc > 1) ? argv[1] : "config/config.conf";
 
     /* 1. Caricamento della configurazione */
-    Config cfg;
-    if (config_load(config_path, &cfg) == -1) {
-        fprintf(stderr, "responsabile_mensa: errore nel caricamento del file di configurazione '%s'\n", config_path);
-        exit(EXIT_FAILURE);
-    }
+    Config cfg = config_load(config_path);
 
     printf("[RESPONSABILE] Configurazione caricata con successo da '%s'.\n", config_path);
 
@@ -48,11 +44,11 @@ int main(int argc, char *argv[]) {
 
     /* Inizializzazione dei semafori con i conteggi presi da config */
     IpcSeatCounts seats = {
-        .postazioni_primi   = cfg.postazioni_primi,
-        .postazioni_secondi = cfg.postazioni_secondi,
-        .postazioni_coffee  = cfg.postazioni_coffee,
-        .postazioni_cassa   = cfg.postazioni_cassa,
-        .tavoli             = cfg.tavoli
+        .postazioni_primi   = cfg.nof_wk_seats_primi,
+        .postazioni_secondi = cfg.nof_wk_seats_secondi,
+        .postazioni_coffee  = cfg.nof_wk_seats_coffee,
+        .postazioni_cassa   = cfg.nof_wk_seats_cassa,
+        .tavoli             = cfg.nof_table_seats
     };
     sem_set_init(semid, &seats);
 
@@ -60,10 +56,10 @@ int main(int argc, char *argv[]) {
 
     /* 5. Avvio dei processi figli (Stazioni, Cassa, Utenti) */
     /* Nota: Qui verranno inserite le fork/exec per i vari moduli della mensa. */
-    printf("[RESPONSABILE] Avvio della simulazione per %d giorni...\n", cfg.giorni_simulazione);
+    printf("[RESPONSABILE] Avvio della simulazione per %d giorni...\n", cfg.sim_duration);
 
     /* Simulazione dei giorni */
-    for (int giorno = 1; giorno <= cfg.giorni_simulazione; giorno++) {
+    for (int giorno = 1; giorno <= cfg.sim_duration; giorno++) {
         printf("\n--- INIZIO GIORNO %d ---\n", giorno);
         
         stats_init_daily(stats);
