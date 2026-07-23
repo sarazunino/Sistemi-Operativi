@@ -1,22 +1,44 @@
-/*
- * Processo UTENTE
- * -----------------
- * - Decide il menu (lettura config/menu.txt)
- * - Si accoda alla stazione primi/secondi/coffee in base alle code
- *   (stato code leggibile da memoria condivisa)
- * - Se il piatto scelto è terminato: sceglie alternativa dello stesso
- *   tipo, o rinuncia a quel tipo, o desiste del tutto se non c'è nulla
- * - Passa in cassa, paga
- * - Cerca un posto libero tra i NOF_TABLE_SEATS, mangia, poi esce
- * - Se a fine giornata è ancora in coda: abbandona (statistiche "non serviti")
- *
- * Versione completa: gestione utente_w_ticket / utente_w_o_ticket
- * e gruppi che pagano insieme.
- *
- * TODO: implementare
- */
+#include "common.h"
+#include "ipc_utils.h"
+#include "logger.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <signal.h>
+
+static int running = 1;
+
+static void handle_sigterm(int sig) {
+    (void)sig;
+    running = 0;
+}
 
 int main(int argc, char *argv[]) {
-    (void)argc; (void)argv;
-    return 0;
+    (void)argc;
+    (void)argv;
+
+    struct sigaction sa;
+    sa.sa_handler = handle_sigterm;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+
+    int semid = sem_set_get(0);
+    if (semid == -1) {
+        fprintf(stderr, "utente: errore nell'acquisizione delle risorse IPC\n");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("[UTENTE] Entrato in mensa e pronto a ordinare...\n");
+
+    // Simulazione del percorso dell'utente (scelta stazioni, coda, cassa)
+    while (running) {
+        // Interazione con le stazioni e la cassa
+        break; // L'utente compie il suo ciclo e termina
+    }
+
+    printf("[UTENTE] Ha terminato il pasto ed è uscito.\n");
+    return EXIT_SUCCESS;
 }

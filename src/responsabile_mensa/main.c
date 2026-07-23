@@ -1,21 +1,96 @@
-/*
- * Processo RESPONSABILE MENSA
- * ----------------------------
- * - Legge la configurazione (config.h)
- * - Crea le risorse IPC condivise (memoria condivisa, semafori, code)
- * - Crea (fork+execve) NOF_WORKERS operatori, NOF_USERS utenti, il cassiere
- * - Crea le 4 stazioni di distribuzione + i posti tavolo
- * - Attende che tutti i processi abbiano finito l'inizializzazione
- *   (es. tramite semaforo/barriera) prima di far partire la simulazione
- * - Cicla per SIM_DURATION giorni, ognuno "lungo" N_NANO_SECS al minuto
- * - Ogni fine giornata: legge le statistiche (mai le scrive!) e le stampa
- * - Gestisce la terminazione (timeout / overload), stampa causa finale
- * - Dealloca tutte le risorse IPC prima di uscire
- *
- * TODO: implementare tutto quanto sopra
- */
+#include "common.h"
+#include "config.h"
+#include "ipc_utils.h"
+#include "stats.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <errno.h>
 
 int main(int argc, char *argv[]) {
-    (void)argc; (void)argv;
-    return 0;
+    const char *config_path = (argc > 1) ? argv[1] : "config.conf";
+
+    /* 1. Caricamento della configurazione */
+    Config cfg;
+    if (config_load(config_path, &cfg) == -1) {
+        fprintf(stderr, "responsabile_mensa: errore nel caricamento del file di configurazione '%s'\n", config_path);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("[RESPONSABILE] Configurazione caricata con successo da '%s'.\n", config_path);
+
+    /* 2. Registrazione signal handler per la pulizia sicura */
+    ipc_register_cleanup_on_signal();
+
+    /* 3. Creazione delle risorse IPC */
+    int shm_stazioni_id = shm_stazioni_get(1);
+    int shm_stats_id    = shm_stats_get(1);
+    int semid           = sem_set_get(1);
+
+    int msgq_primi      = msgq_primi_get(1);
+    int msgq_secondi    = msgq_secondi_get(1);
+    int msgq_coffee     = msgq_coffee_get(1);
+    int msgq_cassa      = msgq_cassa_get(1);
+
+    /* Tracciamo le risorse per il cleanup automatico in caso di crash/interruzione */
+    ipc_track_for_cleanup(shm_stazioni_id, shm_stats_id, semid,
+                          msgq_primi, msgq_secondi, msgq_coffee, msgq_cassa);
+
+    /* 4. Attach e inizializzazione delle memorie condivise */
+    StatoStazioni *stato = shm_stazioni_attach(shm_stazioni_id);
+    shm_stazioni_init(stato);
+
+    Statistiche *stats = shm_stats_attach(shm_stats_id);
+    stats_init_global(stats);
+
+    /* Inizializzazione dei semafori con i conteggi presi da config */
+    IpcSeatCounts seats = {
+        .postazioni_primi   = cfg.postazioni_primi,
+        .postazioni_secondi = cfg.postazioni_secondi,
+        .postazioni_coffee  = cfg.postazioni_coffee,
+        .postazioni_cassa   = cfg.postazioni_cassa,
+        .tavoli             = cfg.tavoli
+    };
+    sem_set_init(semid, &seats);
+
+    printf("[RESPONSABILE] Risorse IPC create e inizializzate correttamente.\n");
+
+    /* 5. Avvio dei processi figli (Stazioni, Cassa, Utenti) */
+    /* Nota: Qui verranno inserite le fork/exec per i vari moduli della mensa. */
+    printf("[RESPONSABILE] Avvio della simulazione per %d giorni...\n", cfg.giorni_simulazione);
+
+    /* Simulazione dei giorni */
+    for (int giorno = 1; giorno <= cfg.giorni_simulazione; giorno++) {
+        printf("\n--- INIZIO GIORNO %d ---\n", giorno);
+        
+        stats_init_daily(stats);
+
+        /* Simulazione temporanea della giornata (verrà sostituita dalla sincronizzazione reale dei processi) */
+        sleep(2); 
+
+        /* Esportazione report giornaliero in CSV */
+        char csv_path[128];
+        snprintf(csv_path, sizeof(csv_path), "output/stats_giorno_%d.csv", giorno);
+        stats_export_to_csv(stats, csv_path);
+        stats_print_daily(stats);
+
+        printf("--- FINE GIORNO %d ---\n", giorno);
+    }
+
+    /* 6. Statistiche finali e export totale */
+    stats_print_total(stats);
+    stats_export_to_csv(stats, "output/stats_totali.csv");
+    printf("[RESPONSABILE] Simulazione completata. Report salvati nella cartella 'output/'.\n");
+
+    /* 7. Detach e Deallocazione pulita delle risorse IPC */
+    shm_stazioni_detach(stato);
+    shm_stats_detach(stats);
+
+    ipc_cleanup_all(shm_stazioni_id, shm_stats_id, semid,
+                    msgq_primi, msgq_secondi, msgq_coffee, msgq_cassa);
+
+    return EXIT_SUCCESS;
 }
