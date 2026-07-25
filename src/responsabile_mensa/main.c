@@ -172,6 +172,8 @@ int main(int argc, char *argv[]) {
      * add_users puo' aggregare i nuovi utenti allo stesso gruppo e
      * a fine simulazione un solo killpg raggiunge tutti i discendenti */
     setpgid(0, 0);
+    signal(SIGUSR1, SIG_IGN);
+
     FILE *pf = fopen("output/responsabile.pid", "w");
     if (pf) { fprintf(pf, "%d\n", getpid()); fclose(pf); }
 

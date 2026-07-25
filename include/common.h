@@ -22,7 +22,7 @@
 #define FTOK_PATH_MSGQ_SECONDI  "src/common/config.c"
 #define FTOK_PATH_MSGQ_COFFEE   "src/common/stats.c"
 #define FTOK_PATH_MSGQ_CASSA    "src/common/ipc_utils.c"
-#define FTOK_PATH_MSGQ_GRUPPO   "src/common/common.h"
+#define FTOK_PATH_MSGQ_GRUPPO   "src/common/stats.c"
 
 #define FTOK_PROJ_ID_SHM_STAZIONI 'A'
 #define FTOK_PROJ_ID_SHM_STATS    'B'

@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
                 usleep((useconds_t)rand_intorno(avg_srvc, pct) * 1000);
 
                 MsgRispostaCassa resp;
-                resp.mtype = req.utente_pid;
+                resp.mtype = req.richiedente_pid; 
                 resp.totale_pagato = totale;
                 msgsnd(msgid, &resp, sizeof(resp) - sizeof(long), 0);
 
