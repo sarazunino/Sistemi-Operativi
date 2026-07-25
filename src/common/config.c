@@ -55,13 +55,16 @@ Config config_load(const char *path) {
         {"PRICE_PRIMI",           &cfg.price_primi,           NULL, 0},
         {"PRICE_SECONDI",         &cfg.price_secondi,         NULL, 0},
         {"PRICE_COFFEE",          &cfg.price_coffee,          NULL, 0},
-        {"NOF_PAUSE",             &cfg.nof_pause,              NULL, 0},
-        {"SIM_DURATION",          &cfg.sim_duration,           NULL, 0},
-        {"N_NANO_SECS",           NULL, &cfg.n_nano_secs,       1},
+        {"NOF_PAUSE",             &cfg.nof_pause,             NULL, 0},
+        {"SIM_DURATION",          &cfg.sim_duration,          NULL, 0},
+        {"N_NANO_SECS",           NULL, &cfg.n_nano_secs,           1},
         {"OVERLOAD_THRESHOLD",    &cfg.overload_threshold,    NULL, 0},
         {"MAX_USERS_PER_GROUP",   &cfg.max_users_per_group,   NULL, 0},
         {"STOP_DURATION",         &cfg.stop_duration,         NULL, 0},
         {"N_NEW_USERS",           &cfg.n_new_users,           NULL, 0},
+        {"NOF_TICKET_READERS",    &cfg.nof_ticket_readers,    NULL, 0},
+        {"AVG_SRVC_TICKET",       &cfg.avg_srvc_ticket,       NULL, 0},
+        {"TICKET_DISCOUNT_PCT",   &cfg.ticket_discount_pct,   NULL, 0},
     };
     const size_t n_campi = sizeof(tabella) / sizeof(tabella[0]);
 
