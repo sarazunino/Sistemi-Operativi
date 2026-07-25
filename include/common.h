@@ -26,6 +26,7 @@
 #define FTOK_PATH_MSGQ_SECONDI  "src/common/config.c"
 #define FTOK_PATH_MSGQ_COFFEE   "src/common/stats.c"
 #define FTOK_PATH_MSGQ_CASSA    "src/common/ipc_utils.c"
+#define FTOK_PATH_MSGQ_GRUPPO    "src/common/common.h"
 
 #define FTOK_PROJ_ID_SHM_STAZIONI 'A'
 #define FTOK_PROJ_ID_SHM_STATS    'B'
@@ -34,6 +35,7 @@
 #define FTOK_PROJ_ID_MSGQ_SECONDI 'E'
 #define FTOK_PROJ_ID_MSGQ_COFFEE  'F'
 #define FTOK_PROJ_ID_MSGQ_CASSA   'G'
+#define FTOK_PROJ_ID_MSGQ_GRUPPO 'H'
 
 /* ======================================================================
  * Limiti statici (per dimensionare array in shared memory)
@@ -83,6 +85,21 @@ typedef struct {
 } Piatto;
 
 /* ======================================================================
+ * Messaggio: membro di un gruppo -> capogruppo (pre-cassa)
+ * ====================================================================== */
+typedef struct {
+    long  mtype;            /* = capogruppo_pid */
+    pid_t membro_pid;
+    int   ha_ticket;
+    int   ha_primo;
+    int   primo_idx;
+    int   ha_secondo;
+    int   secondo_idx;
+    int   ha_dolce_caffe;
+    int   tipo_caffe;
+} MsgOrdineGruppo;
+
+/* ======================================================================
  * Shared memory: stato "vivo" delle stazioni di distribuzione
  * (porzioni residue, postazioni operatore, lunghezza code)
  * Protetta da SEM_MUTEX_STAZIONE_PRIMI / SECONDI (vedi sotto);
@@ -123,8 +140,9 @@ typedef struct {
     int operatori_assegnati[NUM_STAZIONI];
     int operatori_in_pausa[NUM_STAZIONI];
 
-    /* flag versione "completa": 1 mentre communication_disorder e' attivo */
-    int cassa_bloccata;
+    int utenti_in_attesa;       /* utenti attualmente in una coda qualsiasi (per overload) */
+    int nof_children_totali;
+    int processi_pronti;
 } StatoStazioni;
 
 /* ======================================================================
@@ -225,6 +243,10 @@ typedef enum {
     SEM_POSTAZIONI_COFFEE,        /* conteggio = NOF_WK_SEATS_COFFEE */
     SEM_POSTAZIONI_CASSA,         /* conteggio = NOF_WK_SEATS_CASSA */
     SEM_TAVOLI,                   /* conteggio = NOF_TABLE_SEATS */
+    SEM_GATE_START,       /* conteggio: rilascia operatori/utenti a inizio giornata */
+    SEM_BARRIERA_READY,   /* conteggio: sync iniziale + fine giornata */
+    SEM_MUTEX_ATTESA,     /* protegge utenti_in_attesa e nof_children_totali */
+    SEM_CASSA_ATTIVA, 
     NUM_SEMAFORI
 } IndiceSemaforo;
 

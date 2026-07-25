@@ -28,6 +28,7 @@ static int g_msgq_primi      = -1;
 static int g_msgq_secondi    = -1;
 static int g_msgq_coffee     = -1;
 static int g_msgq_cassa      = -1;
+static int g_msgq_gruppo     = -1;   /* NUOVO */
 
 static key_t genera_chiave(const char *path, int proj_id) {
     key_t k = ftok(path, proj_id);
@@ -133,7 +134,12 @@ void sem_set_init(int semid, const IpcSeatCounts *seats) {
     valori[SEM_POSTAZIONI_SECONDI]  = (unsigned short)seats->postazioni_secondi;
     valori[SEM_POSTAZIONI_COFFEE]   = (unsigned short)seats->postazioni_coffee;
     valori[SEM_POSTAZIONI_CASSA]    = (unsigned short)seats->postazioni_cassa;
+    valori[SEM_POSTAZIONI_TICKET]   = (unsigned short)seats->lettori_ticket;  /* NUOVO */
     valori[SEM_TAVOLI]              = (unsigned short)seats->tavoli;
+    valori[SEM_GATE_START]     = 0;
+    valori[SEM_BARRIERA_READY] = 0;
+    valori[SEM_MUTEX_ATTESA]   = 1;
+    valori[SEM_CASSA_ATTIVA]   = 1;
 
     union semun arg;
     arg.array = valori;
@@ -187,13 +193,18 @@ int msgq_cassa_get(int create) {
     return msgq_get_generic(FTOK_PATH_MSGQ_CASSA, FTOK_PROJ_ID_MSGQ_CASSA, create);
 }
 
+/* NUOVO: coda per l'aggregazione degli ordini di gruppo (membro -> capogruppo) */
+int msgq_gruppo_get(int create) {
+    return msgq_get_generic(FTOK_PATH_MSGQ_GRUPPO, FTOK_PROJ_ID_MSGQ_GRUPPO, create);
+}
+
 /* ======================================================================
  * Cleanup
  * ====================================================================== */
 
 void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid,
-                     int msgq_primi, int msgq_secondi,
-                     int msgq_coffee, int msgq_cassa) {
+                      int msgq_primi, int msgq_secondi, int msgq_coffee,
+                      int msgq_cassa, int msgq_gruppo) {   /* NUOVO parametro */
     if (shm_stazioni_id != -1) shmctl(shm_stazioni_id, IPC_RMID, NULL);
     if (shm_stats_id    != -1) shmctl(shm_stats_id, IPC_RMID, NULL);
     if (semid           != -1) semctl(semid, 0, IPC_RMID);
@@ -201,11 +212,12 @@ void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid,
     if (msgq_secondi    != -1) msgctl(msgq_secondi, IPC_RMID, NULL);
     if (msgq_coffee     != -1) msgctl(msgq_coffee, IPC_RMID, NULL);
     if (msgq_cassa      != -1) msgctl(msgq_cassa, IPC_RMID, NULL);
+    if (msgq_gruppo     != -1) msgctl(msgq_gruppo, IPC_RMID, NULL);   /* NUOVO */
 }
 
 void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid,
-                            int msgq_primi, int msgq_secondi,
-                            int msgq_coffee, int msgq_cassa) {
+                            int msgq_primi, int msgq_secondi, int msgq_coffee,
+                            int msgq_cassa, int msgq_gruppo) {   /* NUOVO parametro */
     g_shm_stazioni_id = shm_stazioni_id;
     g_shm_stats_id    = shm_stats_id;
     g_semid           = semid;
@@ -213,12 +225,14 @@ void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid,
     g_msgq_secondi    = msgq_secondi;
     g_msgq_coffee     = msgq_coffee;
     g_msgq_cassa      = msgq_cassa;
+    g_msgq_gruppo     = msgq_gruppo;   /* NUOVO */
 }
 
 static void cleanup_signal_handler(int signo) {
     (void)signo;
     ipc_cleanup_all(g_shm_stazioni_id, g_shm_stats_id, g_semid,
-                     g_msgq_primi, g_msgq_secondi, g_msgq_coffee, g_msgq_cassa);
+                     g_msgq_primi, g_msgq_secondi, g_msgq_coffee, g_msgq_cassa,
+                     g_msgq_gruppo);   /* NUOVO */
     _exit(EXIT_FAILURE);
 }
 

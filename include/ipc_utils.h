@@ -106,4 +106,15 @@ void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid,
                             int msgq_primi, int msgq_secondi,
                             int msgq_coffee, int msgq_cassa);
 
+int msgq_gruppo_get(int create);
+
+/* firme aggiornate con il nuovo msgq */
+void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid,
+                      int msgq_primi, int msgq_secondi, int msgq_coffee,
+                      int msgq_cassa, int msgq_gruppo);
+
+void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid,
+                            int msgq_primi, int msgq_secondi, int msgq_coffee,
+                            int msgq_cassa, int msgq_gruppo);
+
 #endif /* IPC_UTILS_H */

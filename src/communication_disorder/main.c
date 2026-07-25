@@ -1,39 +1,40 @@
 #include "common.h"
+#include "config.h"
 #include "ipc_utils.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#ifndef STOP_DURATION
-#define STOP_DURATION 5
-#endif
-
+/* Interrompe per STOP_DURATION secondi il funzionamento della cassa,
+ * azzerando SEM_CASSA_ATTIVA: il/i cassiere/i sono gia' predisposti
+ * (vedi cassiere.c) a bloccarsi automaticamente su questo semaforo
+ * senza attesa attiva, e a riprendere non appena viene ripristinato. */
 int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
+    Config cfg = config_load(CONFIG_PATH_DEFAULT);
 
-    printf("[COMMUNICATION_DISORDER] Avviato: tentativo di aggancio alle risorse IPC...\n");
-
-    /* 1. Aggancio al set di semafori esistente (create = 0) */
-    int semid = sem_set_get(0);
-    if (semid == -1) {
-        fprintf(stderr, "[COMMUNICATION_DISORDER] Errore: impossibile accedere al set di semafori.\n");
-        exit(EXIT_FAILURE);
+    int durata = cfg.stop_duration;
+    if (argc > 1) {
+        int override = atoi(argv[1]);
+        if (override > 0) durata = override;
+    }
+    if (durata <= 0) {
+        fprintf(stderr, "communication_disorder: STOP_DURATION non valido (%d)\n", durata);
+        return EXIT_FAILURE;
     }
 
-    printf("[COMMUNICATION_DISORDER] Blocco della stazione cassa per %d secondi...\n", STOP_DURATION);
+    int semid = sem_set_get(0);
+    if (semid == -1) {
+        fprintf(stderr, "communication_disorder: risorse IPC non trovate, la simulazione e' avviata?\n");
+        return EXIT_FAILURE;
+    }
 
-    /* 2. Esegue il blocco della cassa acquisendo il mutex/semaforo di stato della cassa */
-    sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
+    printf("[COMMUNICATION_DISORDER] Guasto ai pagamenti automatici: cassa bloccata per %d secondi.\n", durata);
 
-    /* 3. Mantiene il blocco per la durata stabilita */
-    sleep(STOP_DURATION);
+    sem_wait_idx(semid, SEM_CASSA_ATTIVA);
+    sleep((unsigned int)durata);
+    sem_signal_idx(semid, SEM_CASSA_ATTIVA);
 
-    /* 4. Rilascia il blocco ripristinando il normale funzionamento */
-    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
-
-    printf("[COMMUNICATION_DISORDER] Disservizio terminato. Stazione cassa sbloccata.\n");
-
+    printf("[COMMUNICATION_DISORDER] Guasto risolto: cassa nuovamente operativa.\n");
     return EXIT_SUCCESS;
 }
