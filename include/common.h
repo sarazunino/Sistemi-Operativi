@@ -2,18 +2,14 @@
 #define COMMON_H
 
 #include <sys/types.h>
+#include <stdbool.h>
 #include <string.h>
-
-/* Durata di una giornata lavorativa della mensa, in minuti simulati. */
-#define MINUTI_GIORNO 360  /* es. 6 ore di apertura */
 
 /* ======================================================================
  * Percorsi / chiavi IPC
  * ====================================================================== */
 
 #define CONFIG_PATH_DEFAULT   "config/config.conf"
-#define MENU_PATH_DEFAULT     "config/menu.txt"
-#define STATS_CSV_PATH         "output/stats.csv"
 
 #define FTOK_PATH_SHM_STAZIONI  "config/config.conf"
 #define FTOK_PATH_SHM_STATS     "config/menu.txt"
@@ -22,6 +18,7 @@
 #define FTOK_PATH_MSGQ_SECONDI  "src/common/config.c"
 #define FTOK_PATH_MSGQ_COFFEE   "src/common/stats.c"
 #define FTOK_PATH_MSGQ_CASSA    "src/common/ipc_utils.c"
+#define FTOK_PATH_MSGQ_TICKET     "src/common/ipc_utils.c"
 #define FTOK_PATH_MSGQ_GRUPPO   "src/common/stats.c"
 
 #define FTOK_PROJ_ID_SHM_STAZIONI 'A'
@@ -31,17 +28,25 @@
 #define FTOK_PROJ_ID_MSGQ_SECONDI 'E'
 #define FTOK_PROJ_ID_MSGQ_COFFEE  'F'
 #define FTOK_PROJ_ID_MSGQ_CASSA   'G'
+#define FTOK_PROJ_ID_MSGQ_TICKET  'I'
 #define FTOK_PROJ_ID_MSGQ_GRUPPO  'H'
 
 /* ======================================================================
  * Limiti statici (per dimensionare array in shared memory / messaggi)
  * ====================================================================== */
 
-#define MAX_PIATTI_PRIMI     4   /* menu.txt ne richiede almeno 2 */
+#define MAX_PIATTI_PRIMI     4  
 #define MAX_PIATTI_SECONDI   4
-#define NOF_TIPI_CAFFE        4   /* normale, macchiato, decaffeinato, ginseng */
+#define MAX_CONTORNI         4
+#define NOF_TIPI_CAFFE       4   
+#define MAX_DOLCI            4
 #define MAX_NOME_PIATTO      32
-#define MAX_GRUPPO            8   /* cap compile-time; MAX_USERS_PER_GROUP (config) deve essere <= MAX_GRUPPO */
+#define MAX_GRUPPO           8   
+#define NOF_WORKERS_MAX      32
+
+#define TERMINAZIONE_IN_CORSO 0
+#define TERMINAZIONE_TIMEOUT  1
+#define TERMINAZIONE_OVERLOAD 2
 
 /* ======================================================================
  * Tipi di stazione / piatto
@@ -58,7 +63,9 @@ typedef enum {
 typedef enum {
     TIPO_PRIMO = 0,
     TIPO_SECONDO,
-    TIPO_DOLCE_CAFFE,
+    TIPO_CONTORNO,
+    TIPO_DOLCE,
+    TIPO_CAFFE,
     NUM_TIPI_PIATTO
 } TipoPiatto;
 
@@ -72,7 +79,7 @@ typedef enum {
 typedef enum {
     ESITO_OK = 0,
     ESITO_SOSTITUITO,
-    ESITO_TIPO_ESAURITO,
+    ESITO_TIPO_ESAURITO
 } EsitoServizio;
 
 typedef struct {
@@ -86,19 +93,33 @@ typedef struct {
 
 typedef struct {
     Piatto piatti[MAX_PIATTI_PRIMI];
-    int    num_piatti_oggi;
-    int    porzioni_disponibili[MAX_PIATTI_PRIMI];
-    int    max_porzioni;
-    int    esaurito;
-} StatoStazionePrimiSecondi;
+    int num_piatti_oggi;
+    int porzioni_disponibili[MAX_PIATTI_PRIMI];
+    int max_porzioni;
+    int esaurito;
+} StatoStazionePrimi;
 
 typedef struct {
-    int placeholder;
+    Piatto piatti[MAX_PIATTI_SECONDI];
+    int num_piatti_oggi;
+    int porzioni_disponibili[MAX_PIATTI_SECONDI];
+    Piatto contorni[MAX_CONTORNI];
+    int num_contorni;
+    int contorno_associato[MAX_PIATTI_SECONDI];
+    int max_porzioni;
+    int esaurito;
+} StatoStazioneSecondi;
+
+typedef struct {
+    Piatto caffe[NOF_TIPI_CAFFE];
+    int num_caffe;
+    Piatto dolci[MAX_DOLCI];
+    int num_dolci;
 } StatoStazioneCoffee;
 
 typedef struct {
-    StatoStazionePrimiSecondi primi;
-    StatoStazionePrimiSecondi secondi;
+    StatoStazionePrimi        primi;
+    StatoStazioneSecondi      secondi;
     StatoStazioneCoffee       coffee;
 
     int postazioni_libere[NUM_STAZIONI];
@@ -134,13 +155,40 @@ typedef struct {
 
     int  operatori_attivi_oggi;
     int  operatori_attivi_tot;
+
+    bool operatore_contato_oggi[NOF_WORKERS_MAX];
+    bool operatore_contato_tot[NOF_WORKERS_MAX];
+
+    int tavoli_occupati;
+    int utenti_in_attesa_tavolo;
+    long utenti_che_hanno_mangiato;
+
     long pause_oggi;
     long pause_tot;
 
     long ricavo_oggi;
     long ricavo_tot;
 
+    long utenti_con_ticket_oggi;
+    long utenti_con_ticket_tot;
+    long utenti_senza_ticket_oggi;
+    long utenti_senza_ticket_tot;
+
+    long sconto_ticket_oggi;
+    long sconto_ticket_tot;
+
+    long somma_attesa_ticket_oggi;
+    long conteggio_attesa_ticket_oggi;
+    long somma_attesa_ticket_tot;
+    long conteggio_attesa_ticket_tot;
+
+    double somma_attesa_complessiva_oggi;
+    long conteggio_attesa_complessivo_oggi;
+    double somma_attesa_complessiva_tot;
+    long conteggio_attesa_complessivo_tot;
+
     int giorno_corrente;
+    int motivo_terminazione;
 } Statistiche;
 
 /* ======================================================================
@@ -154,7 +202,9 @@ typedef struct {
     pid_t  utente_pid;
     int    tipo_piatto;
     int    scelta_idx;
+    int    contorno_idx;
     int    tipo_caffe;
+    int    dolce_idx;
 } MsgRichiestaCibo;
 
 typedef struct {
@@ -165,7 +215,7 @@ typedef struct {
 } MsgRispostaCibo;
 
 /* ======================================================================
- * Messaggi per la coda cassa (versione completa: supporta gruppi e ticket)
+ * Messaggi per la coda cassa
  * ====================================================================== */
 
 typedef struct {
@@ -178,7 +228,10 @@ typedef struct {
     int    primo_idx[MAX_GRUPPO];
     int    ha_secondo[MAX_GRUPPO];
     int    secondo_idx[MAX_GRUPPO];
-    int    ha_dolce_caffe[MAX_GRUPPO];
+    int    contorno_idx[MAX_GRUPPO];
+    int    ha_dolce[MAX_GRUPPO];
+    int    dolce_idx[MAX_GRUPPO];
+    int    ha_caffe[MAX_GRUPPO];
     int    tipo_caffe[MAX_GRUPPO];
 } MsgRichiestaCassa;
 
@@ -199,7 +252,10 @@ typedef struct {
     int   primo_idx;
     int   ha_secondo;
     int   secondo_idx;
-    int   ha_dolce_caffe;
+    int   contorno_idx;
+    int   ha_dolce;
+    int   dolce_idx;
+    int   ha_caffe;
     int   tipo_caffe;
 } MsgOrdineGruppo;
 

@@ -1,11 +1,27 @@
-# Sintassi di esempio (da definire meglio nella relazione):
-# tipo;nome;prezzo
-PRIMO;Pasta al pomodoro;350
-PRIMO;Risotto ai funghi;380
-SECONDO;Pollo arrosto;450
-SECONDO;Frittata;400
-DOLCE;Tiramisu;150
-CAFFE;Normale;100
-CAFFE;Macchiato;110
-CAFFE;Decaffeinato;110
-CAFFE;Ginseng;120
+# Menu mensa
+# Sintassi:
+# tipo;nome
+
+PRIMO;Pasta al pomodoro
+PRIMO;Risotto ai funghi
+PRIMO;Pasta alla carbonara
+PRIMO;Lasagne
+PRIMO;Pasta al pesto
+
+SECONDO;Cotoletta
+SECONDO;Scaloppine al limone
+SECONDO;Pollo arrosto
+
+CONTORNO;Patate fritte
+CONTORNO;Verdure grigliate
+CONTORNO;Insalata mista
+
+DOLCE;Tiramisu
+DOLCE;Panna cotta
+DOLCE;Gelato
+DOLCE;Crostata
+
+CAFFE;Normale
+CAFFE;Macchiato
+CAFFE;Decaffeinato
+CAFFE;Ginseng

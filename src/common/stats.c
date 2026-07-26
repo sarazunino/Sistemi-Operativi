@@ -7,133 +7,209 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+/* ======================================================================
+ * Inizializzazione statistiche
+ * ====================================================================== */
+
 void stats_init_global(Statistiche *stats) {
     if (!stats) return;
+
     memset(stats, 0, sizeof(Statistiche));
     stats->giorno_corrente = 0;
 }
 
 void stats_init_daily(Statistiche *stats) {
     if (!stats) return;
+
     stats->utenti_serviti_oggi = 0;
     stats->utenti_non_serviti_oggi = 0;
-    
+
     for (int i = 0; i < NUM_TIPI_PIATTO; i++) {
         stats->piatti_distribuiti_oggi[i] = 0;
         stats->piatti_avanzati_oggi[i] = 0;
     }
-
     for (int i = 0; i < NUM_STAZIONI; i++) {
         stats->somma_attesa_oggi[i] = 0.0;
         stats->conteggio_attesa_oggi[i] = 0;
     }
 
+    stats->somma_attesa_complessiva_oggi = 0.0;
+    stats->conteggio_attesa_complessivo_oggi = 0;
+
     stats->operatori_attivi_oggi = 0;
+
+    memset(stats->operatore_contato_oggi, 0, sizeof(stats->operatore_contato_oggi));
+
     stats->pause_oggi = 0;
     stats->ricavo_oggi = 0;
+
+    stats->utenti_con_ticket_oggi = 0;
+    stats->utenti_senza_ticket_oggi = 0;
+    stats->sconto_ticket_oggi = 0;
+
+    stats->somma_attesa_ticket_oggi = 0;
+    stats->conteggio_attesa_ticket_oggi = 0;
+
     stats->giorno_corrente++;
 }
 
+/* ======================================================================
+ * Registrazione utenti
+ * ====================================================================== */
+
 void stats_record_utente_servito(Statistiche *stats, int semid, TipoStazione stazione, double wait_time) {
     if (!stats) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
+
     stats->utenti_serviti_oggi++;
     stats->utenti_serviti_tot++;
-    
+    stats->somma_attesa_complessiva_oggi += wait_time;
+    stats->conteggio_attesa_complessivo_oggi++;
+    stats->somma_attesa_complessiva_tot += wait_time;
+    stats->conteggio_attesa_complessivo_tot++;
     if (stazione >= 0 && stazione < NUM_STAZIONI) {
         stats->somma_attesa_oggi[stazione] += wait_time;
         stats->conteggio_attesa_oggi[stazione]++;
         stats->somma_attesa_tot[stazione] += wait_time;
         stats->conteggio_attesa_tot[stazione]++;
     }
-    
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
 void stats_record_utente_non_servito(Statistiche *stats, int semid) {
     if (!stats) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
     stats->utenti_non_serviti_oggi++;
     stats->utenti_non_serviti_tot++;
-    
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
+/* ======================================================================
+ * Piatti
+ * ====================================================================== */
+
 void stats_record_piatto_distribuito(Statistiche *stats, int semid, TipoPiatto tipo) {
-    if (!stats || tipo < 0 || tipo >= NUM_TIPI_PIATTO) return;
+    if (!stats) return;
+    if (tipo < 0 || tipo >= NUM_TIPI_PIATTO) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
     stats->piatti_distribuiti_oggi[tipo]++;
     stats->piatti_distribuiti_tot[tipo]++;
-    
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
 void stats_record_piatto_avanzato(Statistiche *stats, int semid, TipoPiatto tipo, int quantita) {
-    if (!stats || tipo < 0 || tipo >= NUM_TIPI_PIATTO) return;
+    if (!stats) return;
+    if (tipo < 0 || tipo >= NUM_TIPI_PIATTO) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
     stats->piatti_avanzati_oggi[tipo] += quantita;
     stats->piatti_avanzati_tot[tipo] += quantita;
-    
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
-void stats_record_pausa(Statistiche *stats, int semid) {
+/* ======================================================================
+ * Operatori e pause
+ * ====================================================================== */
+
+void stats_record_pausa(Statistiche *stats,int semid) {
     if (!stats) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
     stats->pause_oggi++;
     stats->pause_tot++;
-    
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
+
+void stats_record_operatore_attivo(Statistiche *stats, int semid, int operatore_id) {
+    if (!stats) return;
+    if (operatore_id < 0 || operatore_id >= NOF_WORKERS_MAX) return;
+
+    sem_wait_idx(semid, SEM_MUTEX_STATS);
+    if (!stats->operatore_contato_oggi[operatore_id]) {
+        stats->operatore_contato_oggi[operatore_id] = true;
+        stats->operatori_attivi_oggi++;
+    }
+    if (!stats->operatore_contato_tot[operatore_id]) {
+        stats->operatore_contato_tot[operatore_id] = true;
+        stats->operatori_attivi_tot++;
+    }
+
+    sem_signal_idx(semid, SEM_MUTEX_STATS);
+}
+
+/* ======================================================================
+ * Ricavi e ticket
+ * ====================================================================== */
 
 void stats_record_ricavo(Statistiche *stats, int semid, long importo_centesimi) {
     if (!stats) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
     stats->ricavo_oggi += importo_centesimi;
     stats->ricavo_tot += importo_centesimi;
-    
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
-void stats_record_operatore_attivo(Statistiche *stats, int semid) {
+void stats_record_ticket(Statistiche *stats, int semid, bool ha_ticket, long sconto) {
     if (!stats) return;
+
     sem_wait_idx(semid, SEM_MUTEX_STATS);
-    
-    stats->operatori_attivi_oggi++;
-    stats->operatori_attivi_tot++;
-    
+
+    if (ha_ticket) {
+        stats->utenti_con_ticket_oggi++;
+        stats->utenti_con_ticket_tot++;
+        stats->sconto_ticket_oggi += sconto;
+        stats->sconto_ticket_tot += sconto;
+    } else {
+        stats->utenti_senza_ticket_oggi++;
+        stats->utenti_senza_ticket_tot++;
+    }
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
+
+/* ======================================================================
+ * Stampa statistiche
+ * ====================================================================== */
 
 void stats_print_daily(const Statistiche *stats) {
     if (!stats) return;
+
     printf("\n=== STATISTICHE GIORNALIERE (Giorno %d) ===\n", stats->giorno_corrente);
     printf("Utenti serviti oggi: %ld\n", stats->utenti_serviti_oggi);
     printf("Utenti non serviti oggi: %ld\n", stats->utenti_non_serviti_oggi);
     printf("Ricavo giornaliero: %.2f EUR\n", (double)stats->ricavo_oggi / 100.0);
     printf("Pause operatori oggi: %ld\n", stats->pause_oggi);
-    
+
     for (int i = 0; i < NUM_TIPI_PIATTO; i++) {
-        printf("Piatti tipo %d - Distribuiti: %ld, Avanzati: %ld\n", 
-               i, stats->piatti_distribuiti_oggi[i], stats->piatti_avanzati_oggi[i]);
+        printf("Tipo piatto %d - distribuiti: %ld - avanzati: %ld\n", i, stats->piatti_distribuiti_oggi[i], stats->piatti_avanzati_oggi[i]);
+    }
+
+    if (stats->conteggio_attesa_complessivo_oggi > 0) {
+        printf("Tempo medio attesa totale: %.2f\n",stats->somma_attesa_complessiva_oggi / stats->conteggio_attesa_complessivo_oggi);
     }
 }
 
 void stats_print_total(const Statistiche *stats) {
     if (!stats) return;
+
     printf("\n=== STATISTICHE TOTALI SIMULAZIONE ===\n");
-    printf("Giorni totali simulati: %d\n", stats->giorno_corrente);
+    printf("Giorni simulati: %d\n", stats->giorno_corrente);
     printf("Utenti serviti totali: %ld\n", stats->utenti_serviti_tot);
     printf("Utenti non serviti totali: %ld\n", stats->utenti_non_serviti_tot);
     printf("Ricavo totale: %.2f EUR\n", (double)stats->ricavo_tot / 100.0);
-    printf("Pause operatori totali: %ld\n", stats->pause_tot);
+    printf("Pause totali: %ld\n", stats->pause_tot);
+
+    if (stats->conteggio_attesa_complessivo_tot > 0) {
+        printf("Tempo medio attesa totale: %.2f\n", stats->somma_attesa_complessiva_tot / stats->conteggio_attesa_complessivo_tot);
+    }
 }
+
+/* ======================================================================
+ * CSV
+ * ====================================================================== */
 
 static void crea_cartella_output_se_necessario(const char *filepath) {
     char tmp[256];
@@ -148,34 +224,18 @@ static void crea_cartella_output_se_necessario(const char *filepath) {
     }
 }
 
-void stats_export_to_csv(const Statistiche *stats, const char *filepath) {
+void stats_export_to_csv(const Statistiche *stats, const char *filepath, int giorno) {
     if (!stats || !filepath) return;
-    
     crea_cartella_output_se_necessario(filepath);
 
-    FILE *f = fopen(filepath, "w");
+    FILE *f = fopen(filepath, "a");
     if (!f) {
-        fprintf(stderr, "stats: errore nell'apertura del file CSV '%s': %s\n", filepath, strerror(errno));
+        fprintf(stderr,"stats: errore apertura CSV '%s': %s\n",filepath,strerror(errno));
         return;
     }
 
-    fprintf(f, "Metrica,Valore_Giornaliero,Valore_Totale\n");
-    fprintf(f, "Giorni_Simulati,%d,%d\n", stats->giorno_corrente, stats->giorno_corrente);
-    fprintf(f, "Utenti_Serviti,%ld,%ld\n", stats->utenti_serviti_oggi, stats->utenti_serviti_tot);
-    fprintf(f, "Utenti_Non_Serviti,%ld,%ld\n", stats->utenti_non_serviti_oggi, stats->utenti_non_serviti_tot);
-    fprintf(f, "Ricavo_EUR,%.2f,%.2f\n", (double)stats->ricavo_oggi / 100.0, (double)stats->ricavo_tot / 100.0);
-    fprintf(f, "Pause_Operatori,%ld,%ld\n", stats->pause_oggi, stats->pause_tot);
-
-    for (int i = 0; i < NUM_TIPI_PIATTO; i++) {
-        fprintf(f, "Piatti_Distribuiti_Tipo_%d,%ld,%ld\n", i, stats->piatti_distribuiti_oggi[i], stats->piatti_distribuiti_tot[i]);
-        fprintf(f, "Piatti_Avanzati_Tipo_%d,%ld,%ld\n", i, stats->piatti_avanzati_oggi[i], stats->piatti_avanzati_tot[i]);
-    }
-
-    for (int i = 0; i < NUM_STAZIONI; i++) {
-        double avg_oggi = stats->conteggio_attesa_oggi[i] > 0 ? stats->somma_attesa_oggi[i] / stats->conteggio_attesa_oggi[i] : 0.0;
-        double avg_tot = stats->conteggio_attesa_tot[i] > 0 ? stats->somma_attesa_tot[i] / stats->conteggio_attesa_tot[i] : 0.0;
-        fprintf(f, "Tempo_Medio_Attesa_%s,%.2f,%.2f\n", nome_stazione((TipoStazione)i), avg_oggi, avg_tot);
-    }
+    fprintf(f,"%d,%ld,%ld,%.2f,%ld\n", giorno,stats->utenti_serviti_oggi, stats->utenti_non_serviti_oggi,
+            (double)stats->ricavo_oggi / 100.0, stats->pause_oggi);
 
     fclose(f);
 }
