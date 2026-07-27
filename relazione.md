@@ -17,12 +17,14 @@ Ogni processo è un eseguibile distinto, lanciato con `fork()` +
 `execve()` dal responsabile mensa (o da `add_users`):
 
 - `responsabile_mensa` — crea le risorse IPC, il menu del giorno, gli
-  operatori, i cassieri e gli utenti; scandisce le giornate, rifornisce
-  le stazioni, legge e stampa le statistiche, decide la terminazione e
-  dealloca le risorse IPC;
-- `operatore` — serve una fra le stazioni primi, secondi-contorni e
-  dolce-caffè (il tipo è passato come argomento);
-- `cassiere` — serve la stazione cassa;
+  operatori e gli utenti; scandisce le giornate, decide ogni mattina
+  l'assegnazione operatore-stazione, rifornisce le stazioni, legge e
+  stampa le statistiche, decide la terminazione e dealloca le risorse IPC;
+- `operatore` — un unico eseguibile in grado di servire una qualsiasi
+  delle 4 stazioni (primi, secondi-contorni, dolce-caffè, cassa): quale
+  delle quattro non è fissato all'avvio, ma deciso dal responsabile ogni
+  mattina e comunicato via memoria condivisa (§ "Assegnazione
+  operatore-stazione" più sotto);
 - `utente` — un utente della mensa;
 - `add_users`, `communication_disorder` — eseguibili accessori della
   versione completa, invocabili da linea di comando a simulazione
@@ -55,12 +57,13 @@ in tutti gli eseguibili: `config` (parsing della configurazione),
 - `SEM_MUTEX_ATTESA` — mutex sui contatori degli utenti in coda;
 - `SEM_CASSA_ATTIVA` — flag di funzionamento dei pagamenti automatici.
 
-**Code di messaggi** (5): una per ciascuna delle 4 stazioni, più una per
-la comunicazione fra membri di un gruppo e capogruppo. Su ogni coda di
-stazione le richieste viaggiano con `mtype = MSG_RICHIESTA` (letto dagli
-operatori) e le risposte con `mtype = pid` del destinatario: un solo
-oggetto IPC realizza quindi sia la coda di attesa sia il canale di
-risposta punto-punto.
+**Code di messaggi** (6): una per ciascuna delle 4 stazioni, una per la
+comunicazione fra membri di un gruppo e capogruppo, e una per le
+richieste di `./bin/add_users` al responsabile (versione completa, vedi
+più sotto). Su ogni coda di stazione le richieste viaggiano con
+`mtype = MSG_RICHIESTA` (letto dall'operatore assegnato quel giorno) e le
+risposte con `mtype = pid` del destinatario: un solo oggetto IPC realizza
+quindi sia la coda di attesa sia il canale di risposta punto-punto.
 
 Non c'è alcuna attesa attiva: ogni attesa è una `semop()` o una
 `msgrcv()` bloccante, oppure una `sigsuspend()`.
@@ -77,12 +80,36 @@ del guasto restano confrontabili fra loro e con la durata della giornata.
 
 ### Assegnazione operatore-stazione (sez. 5.2)
 
-All'inizio della simulazione ogni stazione riceve un operatore (per
-questo `NOF_WORKERS >= 4` è un vincolo verificato all'avvio); i restanti
-vengono assegnati privilegiando la stazione con il tempo medio di
-servizio *per operatore* più alto, cioè massimizzando ad ogni passo
-`AVG_SRVC / numero di addetti`. Il risultato è una distribuzione
-proporzionale ai tempi medi di servizio.
+Il testo richiede esplicitamente che la politica di associazione
+operatore-servizio sia applicata "all'inizio di ogni giorno", cassa
+compresa ("di tipo distribuzione o cassa"). Per questo `operatore` e
+`cassiere` non sono due eseguibili separati come in una prima versione,
+ma un **unico eseguibile** in grado di servire una qualsiasi delle 4
+stazioni: la stazione non è più fissata a tempo di `execve()` (via
+argomento da riga di comando), ma decisa dal responsabile ogni mattina e
+pubblicata in memoria condivisa (`stato->stazione_operatore_oggi[id]`,
+indicizzata per id dell'operatore).
+
+Ad ogni giornata, prima di rilasciare il cancello (`SEM_GATE_START`), il
+responsabile ricalcola l'assegnazione: ogni stazione riceve subito un
+operatore (per questo `NOF_WORKERS >= 4` è un vincolo verificato
+all'avvio); i restanti vengono assegnati privilegiando la stazione con
+il tempo medio di servizio *per operatore* più alto, cioè massimizzando
+ad ogni passo `AVG_SRVC / numero di addetti`. Il risultato è una
+distribuzione proporzionale ai tempi medi di servizio, ricalcolata da
+zero ogni mattina (con gli stessi `AVG_SRVC_*` la distribuzione risulta
+la stessa giorno per giorno, ma il meccanismo è comunque quello
+richiesto: nulla vieta che una futura politica più elaborata la faccia
+variare).
+
+La scrittura di `stazione_operatore_oggi[]` avviene interamente prima
+della `signal` su `SEM_GATE_START`: le operazioni sui semafori fanno da
+barriera di memoria, quindi ogni operatore, appena si risveglia dal
+cancello, vede in modo sicuro l'assegnazione di quella giornata senza
+bisogno di un mutex dedicato. L'operatore stesso non sa in anticipo quale
+stazione servirà: apre tutte e 4 le code di messaggi all'avvio e sceglie
+quale usare solo dopo aver letto la propria voce dell'array, ogni
+mattina.
 
 ### Pause degli operatori (sez. 5.3)
 

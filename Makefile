@@ -1,6 +1,8 @@
 # Makefile - compila tutti gli eseguibili del progetto
-# Ogni processo (responsabile_mensa, operatore, cassiere, utente, ...)
-# deve diventare un eseguibile separato in bin/, lanciato poi con execve().
+# Ogni tipo di processo (responsabile_mensa, operatore, utente, ...)
+# diventa un eseguibile separato in bin/, lanciato poi con execve().
+# "operatore" serve indifferentemente una qualsiasi delle 4 stazioni
+# (comprese la cassa), decisa ogni giorno dal responsabile (sez. 5.2).
 
 CC = gcc
 CFLAGS = -Wvla -Wextra -Werror -D_GNU_SOURCE -Iinclude -g
@@ -19,7 +21,6 @@ COMMON_OBJS = $(patsubst $(SRC_DIR)/common/%.c, $(OBJ_DIR)/%.o, $(COMMON_SRCS))
 TARGETS = \
 	$(BIN_DIR)/responsabile_mensa \
 	$(BIN_DIR)/operatore \
-	$(BIN_DIR)/cassiere \
 	$(BIN_DIR)/utente \
 	$(BIN_DIR)/add_users \
 	$(BIN_DIR)/communication_disorder
@@ -42,9 +43,6 @@ $(BIN_DIR)/responsabile_mensa: $(OBJ_DIR)/main_responsabile.o $(COMMON_OBJS)
 $(BIN_DIR)/operatore: $(OBJ_DIR)/main_operatore.o $(COMMON_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@
 
-$(BIN_DIR)/cassiere: $(OBJ_DIR)/main_cassiere.o $(COMMON_OBJS)
-	$(CC) $(CFLAGS) $^ -o $@
-
 $(BIN_DIR)/utente: $(OBJ_DIR)/main_utente.o $(COMMON_OBJS)
 	$(CC) $(CFLAGS) $^ -o $@
 
@@ -60,9 +58,6 @@ $(OBJ_DIR)/main_responsabile.o: $(SRC_DIR)/responsabile_mensa/main.c $(INC_DIR)/
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/main_operatore.o: $(SRC_DIR)/operatore/main.c $(INC_DIR)/*.h
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(OBJ_DIR)/main_cassiere.o: $(SRC_DIR)/cassiere/main.c $(INC_DIR)/*.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJ_DIR)/main_utente.o: $(SRC_DIR)/utente/main.c $(INC_DIR)/*.h

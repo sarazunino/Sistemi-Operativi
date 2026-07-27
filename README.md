@@ -10,8 +10,7 @@ Ogni processo del simulatore è un eseguibile a sé stante
 | Eseguibile                     | Ruolo |
 |--------------------------------|-------|
 | `bin/responsabile_mensa`       | crea risorse IPC, processi, gestisce le giornate, stampa/esporta le statistiche |
-| `bin/operatore`                | stazione primi, secondi-contorni oppure dolce-caffè |
-| `bin/cassiere`                 | stazione cassa: incassa e applica lo sconto ticket |
+| `bin/operatore`                | serve una qualsiasi delle 4 stazioni (primi, secondi-contorni, dolce-caffè, cassa), decisa ogni mattina dal responsabile |
 | `bin/utente`                   | utente (con o senza ticket, singolo o membro di un gruppo) |
 | `bin/add_users`                | aggiunge N_NEW_USERS utenti a simulazione avviata |
 | `bin/communication_disorder`   | blocca i pagamenti automatici per STOP_DURATION |

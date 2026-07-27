@@ -127,6 +127,16 @@ typedef struct {
     int operatori_assegnati[NUM_STAZIONI];
     int operatori_in_pausa[NUM_STAZIONI];
 
+    /* Stazione assegnata a ciascun operatore nella giornata corrente
+     * (indicizzata per id operatore, 0..NOF_WORKERS-1). Scritta dal
+     * responsabile ogni mattina, PRIMA di rilasciare SEM_GATE_START: la
+     * signal sul semaforo fa da barriera di memoria, quindi ogni
+     * operatore la legge in modo sicuro subito dopo essersi svegliato dal
+     * cancello, senza bisogno di un mutex dedicato (sez. 5.2: "la politica
+     * di associazione operatore-servizio ... deve essere applicata
+     * all'inizio di ogni giorno"). */
+    TipoStazione stazione_operatore_oggi[NOF_WORKERS_MAX];
+
     /* utenti attualmente in coda presso una qualsiasi stazione */
     int utenti_in_attesa;
     /* utenti che, alla chiusura della mensa, erano ancora in coda e hanno

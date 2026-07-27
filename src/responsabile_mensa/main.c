@@ -153,31 +153,24 @@ static void assegna_operatori(const Config *cfg, TipoStazione *assegnazione, int
     }
 }
 
-/* Avvia il processo worker della stazione indicata: ./bin/cassiere per la
- * cassa (eseguibile dedicato, sez. 5.4), ./bin/operatore per le altre tre
- * stazioni di distribuzione. L'id univoco serve per il conteggio degli
- * "operatori attivi" nelle statistiche. */
-static void avvia_worker(TipoStazione tipo, int id, const char *config_path) {
+/* Avvia un processo operatore: un unico eseguibile in grado di servire
+ * una qualsiasi delle 4 stazioni (compresa la cassa), decisa giorno per
+ * giorno dal responsabile e comunicata via memoria condivisa (sez. 5.2),
+ * non piu' fissata all'avvio. L'id univoco serve sia a indicizzare
+ * stato->stazione_operatore_oggi[] sia per il conteggio degli "operatori
+ * attivi" nelle statistiche. */
+static void avvia_worker(int id, const char *config_path) {
     pid_t pid = fork();
-    if (pid < 0) { perror("fork operatore/cassiere"); exit(EXIT_FAILURE); }
+    if (pid < 0) { perror("fork operatore"); exit(EXIT_FAILURE); }
 
     if (pid == 0) {
         char id_str[16];
         snprintf(id_str, sizeof(id_str), "%d", id);
 
-        if (tipo == STAZIONE_CASSA) {
-            char *args[] = { (char *)"./bin/cassiere", (char *)config_path, id_str, NULL };
-            execve("./bin/cassiere", args, environ);
-            perror("execve cassiere");
-            _exit(EXIT_FAILURE);
-        } else {
-            char tipo_str[16];
-            snprintf(tipo_str, sizeof(tipo_str), "%d", (int)tipo);
-            char *args[] = { (char *)"./bin/operatore", (char *)config_path, tipo_str, id_str, NULL };
-            execve("./bin/operatore", args, environ);
-            perror("execve operatore");
-            _exit(EXIT_FAILURE);
-        }
+        char *args[] = { (char *)"./bin/operatore", (char *)config_path, id_str, NULL };
+        execve("./bin/operatore", args, environ);
+        perror("execve operatore");
+        _exit(EXIT_FAILURE);
     }
     figli_pid[n_figli++] = pid;
 }
@@ -433,16 +426,11 @@ int main(int argc, char *argv[]) {
     };
     sem_set_init(semid, &seats);
 
-    /* Assegnazione e avvio di operatori e cassieri (sez. 5.1 / 5.2) */
-    TipoStazione assegnazione[NOF_WORKERS_MAX];
-    assegna_operatori(&cfg, assegnazione, cfg.nof_workers);
-    for (int i = 0; i < cfg.nof_workers; i++) {
-        avvia_worker(assegnazione[i], i, config_path);
-        stato->operatori_assegnati[assegnazione[i]]++;
-    }
-    printf("[RESPONSABILE] Operatori per stazione: primi=%d secondi=%d coffee=%d cassa=%d\n",
-           stato->operatori_assegnati[STAZIONE_PRIMI], stato->operatori_assegnati[STAZIONE_SECONDI],
-           stato->operatori_assegnati[STAZIONE_COFFEE], stato->operatori_assegnati[STAZIONE_CASSA]);
+    /* Avvio degli operatori (sez. 5.1): la stazione di ciascuno per la
+     * prima giornata viene decisa e pubblicata piu' sotto, all'inizio del
+     * ciclo dei giorni, insieme a quella di tutti i giorni successivi. */
+    for (int i = 0; i < cfg.nof_workers; i++)
+        avvia_worker(i, config_path);
 
     crea_utenti_a_gruppi(&cfg, config_path);
 
@@ -466,6 +454,23 @@ int main(int argc, char *argv[]) {
         stats_init_daily(stats);
         stato->utenti_in_attesa = 0;
         stato->utenti_in_coda_fine_giornata = 0;
+
+        /* Riassegnazione operatore-stazione (sez. 5.2): va applicata
+         * "all'inizio di ogni giorno", quindi ricalcolata qui e non solo
+         * all'avvio. La scrittura avviene PRIMA di rilascia_gate() piu'
+         * sotto: la signal sui semafori di SEM_GATE_START fa da barriera
+         * di memoria, garantendo che ogni operatore veda l'assegnazione
+         * odierna non appena si risveglia dal cancello. */
+        TipoStazione assegnazione[NOF_WORKERS_MAX];
+        assegna_operatori(&cfg, assegnazione, cfg.nof_workers);
+        for (int i = 0; i < NUM_STAZIONI; i++) stato->operatori_assegnati[i] = 0;
+        for (int i = 0; i < cfg.nof_workers; i++) {
+            stato->stazione_operatore_oggi[i] = assegnazione[i];
+            stato->operatori_assegnati[assegnazione[i]]++;
+        }
+        printf("[RESPONSABILE] Operatori oggi: primi=%d secondi=%d coffee=%d cassa=%d\n",
+               stato->operatori_assegnati[STAZIONE_PRIMI], stato->operatori_assegnati[STAZIONE_SECONDI],
+               stato->operatori_assegnati[STAZIONE_COFFEE], stato->operatori_assegnati[STAZIONE_CASSA]);
 
         /* le stazioni primi e secondi vengono inizializzate all'inizio di
          * ogni giornata con AVG_REFILL_* porzioni per tipo di piatto */
