@@ -212,6 +212,10 @@ static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
     stats_record_attesa(c->stats, c->semid, staz, ms_trascorsi(&t0, &t1));
 
     if (staz == STAZIONE_COFFEE) {
+        /* con esito diverso da ESITO_OK la stazione ha chiuso prima di
+         * poter servire (drain di fine giornata dell'operatore): non si
+         * e' ottenuto ne' il dolce ne' il caffe' richiesti */
+        if (resp.esito != ESITO_OK) return 0;
         o->ha_dolce = o->vuole_dolce;
         o->ha_caffe = o->vuole_caffe;
         if (o->ha_dolce && resp.piatto_idx >= 0) o->dolce_idx = resp.piatto_idx;
@@ -342,7 +346,9 @@ static int attendi_ricevuta(const Ctx *c) {
     coda_esci(c, 0);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     stats_record_attesa(c->stats, c->semid, STAZIONE_CASSA, ms_trascorsi(&t0, &t1));
-    return 1;
+    /* totale_pagato == -1: la cassa ha chiuso prima di poter incassare
+     * questa richiesta (drain di fine giornata), pagamento non riuscito */
+    return (resp.totale_pagato >= 0);
 }
 
 /* Membro non capogruppo: comunica il proprio ordine al capogruppo e, se
@@ -357,7 +363,7 @@ static int paga_come_membro(const Ctx *c, const Ordine *o, pid_t capo_pid) {
     /* il messaggio viene inviato SEMPRE, anche quando non si partecipa:
      * cosi' il capogruppo sa esattamente quanti ordini attendere */
     while (msgsnd(c->mq_gruppo, &m, sizeof(m) - sizeof(long), 0) == -1) {
-        if (errno == EINTR && !simulazione_finita) continue;
+        if (errno == EINTR && !devo_fermarmi()) continue;
         return 0;
     }
 
@@ -428,7 +434,7 @@ static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
     coda_esci(c, 0);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     stats_record_attesa(c->stats, c->semid, STAZIONE_CASSA, ms_trascorsi(&t0, &t1));
-    return 1;
+    return (resp.totale_pagato >= 0);
 }
 
 /* ======================================================================

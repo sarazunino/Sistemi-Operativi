@@ -12,6 +12,7 @@
 #include <time.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <sys/msg.h>
 
 #define MAX_FIGLI 1024
 
@@ -238,6 +239,43 @@ static void crea_utenti_a_gruppi(const Config *cfg, const char *config_path) {
 }
 
 /* ======================================================================
+ * Aggiunta dinamica di utenti (versione completa, sez. 6): ./bin/add_users
+ * non crea processi direttamente, si limita a mandare una richiesta su
+ * mq_addusers (vedi common.h per la motivazione). E' il responsabile a
+ * fare fork/exec dei nuovi utenti, cosi' che nascano nel proprio process
+ * group (ereditato automaticamente dal padre) e siano regolarmente
+ * raggiungibili da killpg()/waitpid() come quelli creati all'avvio.
+ * ====================================================================== */
+
+static void gestisci_richieste_add_users(const char *config_path,
+                                          int semid, StatoStazioni *stato, int mq_addusers) {
+    MsgRichiestaAddUsers req;
+
+    while (msgrcv(mq_addusers, &req, sizeof(req) - sizeof(long),
+                  MSG_ADDUSERS_RICHIESTA, IPC_NOWAIT) != -1) {
+
+        int n = req.n_utenti;
+        if (n <= 0) continue;
+        if (n_figli + n > MAX_FIGLI) {
+            n = MAX_FIGLI - n_figli;
+            fprintf(stderr, "responsabile: richiesta di add_users troncata a %d utenti (limite di %d processi totali)\n",
+                    n, MAX_FIGLI);
+            if (n <= 0) continue;
+        }
+
+        for (int i = 0; i < n; i++)
+            avvia_utente(config_path, 1, 1, 0);   /* ciascuno capogruppo di se stesso */
+
+        sem_wait_idx(semid, SEM_MUTEX_ATTESA);
+        stato->nof_children_totali += n;
+        sem_signal_idx(semid, SEM_MUTEX_ATTESA);
+
+        printf("[RESPONSABILE] Aggiunti %d nuovi utenti su richiesta di add_users (totale processi: %d).\n",
+               n, n_figli);
+    }
+}
+
+/* ======================================================================
  * Barriere di sincronizzazione (inizializzazione e fine giornata)
  * ====================================================================== */
 
@@ -358,9 +396,10 @@ int main(int argc, char *argv[]) {
     int mq_coffee    = msgq_coffee_get(1);
     int mq_cassa     = msgq_cassa_get(1);
     int mq_gruppo    = msgq_gruppo_get(1);
+    int mq_addusers  = msgq_addusers_get(1);
 
     ipc_track_for_cleanup(shm_st_id, shm_stats_id, semid,
-                          mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo);
+                          mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo, mq_addusers);
 
     StatoStazioni *stato = shm_stazioni_attach(shm_st_id);
     shm_stazioni_init(stato);
@@ -463,6 +502,11 @@ int main(int argc, char *argv[]) {
                                  intervallo, &minuti_refill_primi, &cfg);
             refill_se_necessario(semid, STAZIONE_SECONDI, stato, cfg.avg_refill_secondi,
                                  intervallo, &minuti_refill_secondi, &cfg);
+
+            /* eventuali richieste di ./bin/add_users arrivate nel frattempo
+             * (versione completa, sez. 6): i nuovi utenti entrano a far
+             * parte della simulazione dal giorno successivo */
+            gestisci_richieste_add_users(config_path, semid, stato, mq_addusers);
         }
 
         /* chiusura della mensa: tutti i figli vengono avvisati e si attende
@@ -517,7 +561,7 @@ int main(int argc, char *argv[]) {
 
     shm_stazioni_detach(stato);
     shm_stats_detach(stats);
-    ipc_cleanup_all(shm_st_id, shm_stats_id, semid, mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo);
+    ipc_cleanup_all(shm_st_id, shm_stats_id, semid, mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo, mq_addusers);
 
     printf("[RESPONSABILE] Risorse IPC deallocate.\n");
     return EXIT_SUCCESS;

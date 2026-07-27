@@ -211,12 +211,38 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        /* A mensa chiusa il cassiere lascia la postazione come gli altri
-         * operatori: gli utenti eventualmente ancora in fila alla cassa
-         * rinunciano al pasto, esattamente come chi resta in coda a una
-         * stazione di distribuzione (sez. 5.5), e vengono conteggiati fra
-         * gli utenti non serviti. */
-        if (postazione_occupata) rilascia_postazione(semid, stato);
+        /* Chi ha gia' inviato una richiesta di pagamento prima della
+         * chiusura resta bloccato in un msgrcv che attende proprio la
+         * nostra ricevuta (ogni membro del gruppo, mtype = proprio pid):
+         * se ce ne andiamo senza rispondere, quegli utenti resterebbero in
+         * attesa per sempre. Svuotiamo quindi la coda (non bloccante)
+         * rispondendo con un pagamento "non riuscito" (sentinella -1) a
+         * ciascun membro delle richieste rimaste in sospeso: rinunciano al
+         * pasto, esattamente come chi resta in coda a una stazione di
+         * distribuzione (sez. 5.5), e vengono conteggiati fra gli utenti
+         * non serviti. */
+        if (postazione_occupata) {
+            MsgRichiestaCassa req;
+            while (msgrcv(mq_cassa, &req, sizeof(req) - sizeof(long),
+                          MSG_RICHIESTA, IPC_NOWAIT) != -1) {
+                int num = req.num_membri;
+                if (num < 1) num = 1;
+                if (num > MAX_GRUPPO) num = MAX_GRUPPO;
+
+                for (int i = 0; i < num; i++) {
+                    MsgRispostaCassa resp;
+                    memset(&resp, 0, sizeof(resp));
+                    resp.mtype            = (long)req.membri_pid[i];
+                    resp.totale_pagato    = -1;   /* sentinella: pagamento non riuscito */
+                    resp.sconto_applicato = 0;
+                    while (msgsnd(mq_cassa, &resp, sizeof(resp) - sizeof(long), 0) == -1) {
+                        if (errno == EINTR) continue;
+                        break;
+                    }
+                }
+            }
+            rilascia_postazione(semid, stato);
+        }
 
         sem_signal_idx(semid, SEM_BARRIERA_READY);
     }

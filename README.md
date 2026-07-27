@@ -41,13 +41,17 @@ Configurazioni che forzano le due cause di terminazione (sez. 5.6):
 
 ### Eseguibili della versione completa
 
-Da lanciare in un secondo terminale, mentre la simulazione è in corso:
+Da lanciare in un secondo terminale, mentre la simulazione è in corso
+(funzionano correttamente anche se lanciati da un terminale diverso da
+quello del responsabile: `add_users` comunica con esso solo tramite una
+coda di messaggi, non forka direttamente i nuovi utenti):
 
     ./bin/add_users [n_utenti] [config_path]
     ./bin/communication_disorder [durata_secondi_simulati] [config_path]
 
 Senza argomenti usano `N_NEW_USERS` / `STOP_DURATION` di
-`config/config.conf`.
+`config/config.conf`. I nuovi utenti richiesti da `add_users` iniziano a
+partecipare dal giorno successivo a quello in cui vengono richiesti.
 
 ## Configurazione
 

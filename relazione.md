@@ -175,14 +175,32 @@ ad accodarsi alla cassa.
 
 ### Aggiunta dinamica di utenti (sez. 6)
 
-`add_users` legge il pid del responsabile da `output/responsabile.pid`
-(scritto all'avvio), incrementa il contatore dei figli attesi in memoria
-condivisa e crea i nuovi utenti inserendoli nel process group del
-responsabile, così da riceverne i segnali di fine giornata e di fine
-simulazione. Il segnale che il nuovo utente emette su
-`SEM_BARRIERA_READY` al termine della propria inizializzazione vale come
-presenza alla barriera della giornata in corso; dal giorno successivo si
-allinea al normale ciclo di `SEM_GATE_START`.
+`add_users` **non crea processi direttamente**: invia una richiesta
+(`MsgRichiestaAddUsers`, numero di utenti) su una coda di messaggi
+dedicata ed esce. È il responsabile, che la controlla in modo non
+bloccante ad ogni blocco di 10 minuti simulati, a fare `fork()`+`execve()`
+dei nuovi utenti e a incrementare sotto mutex il contatore dei figli
+attesi in memoria condivisa.
+
+Questa indirezione non è incidentale: se fosse `add_users` a creare i
+processi (come in una prima versione), il figlio dovrebbe unirsi al
+process group del responsabile con `setpgid()` per poter ricevere
+`SIGUSR1`/`SIGTERM` via `killpg()`. Ma `setpgid()` può unire un processo
+solo a un process group della **propria stessa sessione**: lanciando
+`add_users` da un terminale diverso da quello del responsabile (l'uso
+normale previsto dal testo) la chiamata fallisce con `EPERM`, i nuovi
+utenti restano nel process group della shell che li ha creati, non
+ricevono mai i segnali di fine giornata e il responsabile resta bloccato
+per sempre alla barriera successiva. Facendo forkare i nuovi utenti
+al responsabile stesso, questi ereditano automaticamente il suo process
+group (comportamento normale di `fork()`) e vengono anche
+correttamente attesi da `waitpid()` a fine simulazione, senza alcuna
+dipendenza dalla sessione del terminale da cui `add_users` viene invocato.
+
+Il segnale che il nuovo utente emette su `SEM_BARRIERA_READY` al termine
+della propria inizializzazione vale come presenza alla barriera della
+giornata in corso; dal giorno successivo si allinea al normale ciclo di
+`SEM_GATE_START`.
 
 ## 4. Sintassi del file `menu.txt`
 
@@ -213,6 +231,23 @@ maschera, evitando la corsa fra il test del flag e la sospensione.
 Poiché a barriera raggiunta nessun figlio sta lavorando, il responsabile
 può leggere lo stato delle stazioni per contare i piatti avanzati e
 svuotare le code di messaggi, così che ogni giornata inizi pulita.
+
+**Drain di fine giornata.** Un operatore (o il cassiere) smette di
+leggere dalla propria coda non appena nota il flag di fine giornata,
+all'inizio dell'iterazione successiva del proprio ciclo di servizio. Se
+ci sono ancora richieste accodate in quel momento — condizione tutt'altro
+che rara quando la domanda eccede la capacità di servizio, come nella
+configurazione di overload — gli utenti che le hanno inviate restano
+bloccati in un `msgrcv()` che attende proprio quella risposta
+(instradata per `mtype` sul loro pid): nessun altro processo può mai
+rispondergli, quindi resterebbero in attesa per sempre e il responsabile
+non raggiungerebbe mai la barriera. Per questo, prima di rilasciare la
+postazione, operatore e cassiere svuotano la propria coda in modo non
+bloccante (`IPC_NOWAIT`) rispondendo con un esito di "non riuscito"
+(`ESITO_TIPO_ESAURITO` per i piatti, `totale_pagato = -1` per la cassa)
+a chiunque sia rimasto in sospeso: quegli utenti rinunciano al piatto o
+al pasto esattamente come chi trova la coda già chiusa, e vengono
+conteggiati fra i non serviti.
 
 La simulazione termina:
 

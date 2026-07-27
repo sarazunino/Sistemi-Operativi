@@ -212,6 +212,15 @@ int msgq_cassa_get(int create);
 int msgq_gruppo_get(int create);
 
 /**
+ * @brief Ottiene la coda di messaggi usata da ./bin/add_users per
+ *        richiedere al responsabile la creazione di nuovi utenti.
+ *
+ * @param create Valore diverso da zero per creare la coda se assente.
+ * @return Identificatore della coda di messaggi.
+ */
+int msgq_addusers_get(int create);
+
+/**
  * @brief Restituisce il numero di messaggi attualmente presenti in coda.
  *
  * Usata dagli utenti per stimare la lunghezza delle file alle varie
@@ -250,8 +259,9 @@ int msgq_svuota(int msgid);
  * @param msgq_coffee Coda dei messaggi del coffee.
  * @param msgq_cassa Coda dei messaggi della cassa.
  * @param msgq_gruppo Coda dei messaggi dei gruppi.
+ * @param msgq_addusers Coda delle richieste di aggiunta utenti.
  */
-void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo);
+void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo, int msgq_addusers);
 
 /**
  * @brief Registra gli handler dei segnali per la pulizia automatica delle risorse IPC.
@@ -270,7 +280,8 @@ void ipc_register_cleanup_on_signal(void);
  * @param msgq_coffee Coda dei messaggi del coffee.
  * @param msgq_cassa Coda dei messaggi della cassa.
  * @param msgq_gruppo Coda dei messaggi dei gruppi.
+ * @param msgq_addusers Coda delle richieste di aggiunta utenti.
  */
-void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo);
+void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo, int msgq_addusers);
 
 #endif /* IPC_UTILS_H */

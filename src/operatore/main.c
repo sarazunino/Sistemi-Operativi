@@ -331,7 +331,32 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        if (postazione_occupata) rilascia_postazione(semid, stato, tipo);
+        /* Chi ha gia' inviato una richiesta a questa stazione prima della
+         * chiusura resta bloccato in un msgrcv che attende proprio la
+         * nostra risposta (mtype = proprio pid): se ce ne andiamo senza
+         * rispondere, quell'utente resterebbe in attesa per sempre (nessun
+         * altro processo puo' rispondergli), e il responsabile non
+         * raggiungerebbe mai la barriera di fine giornata. Svuotiamo quindi
+         * la coda (non bloccante, si ferma appena e' vuota) rispondendo
+         * "esaurito" a chiunque sia rimasto in sospeso. */
+        if (postazione_occupata) {
+            MsgRichiestaCibo richiesta;
+            while (msgrcv(mq, &richiesta, sizeof(richiesta) - sizeof(long),
+                          MSG_RICHIESTA, IPC_NOWAIT) != -1) {
+                MsgRispostaCibo risposta;
+                memset(&risposta, 0, sizeof(risposta));
+                risposta.mtype        = (long)richiesta.utente_pid;
+                risposta.esito        = ESITO_TIPO_ESAURITO;
+                risposta.piatto_idx   = -1;
+                risposta.contorno_idx = -1;
+                risposta.prezzo       = 0;
+                while (msgsnd(mq, &risposta, sizeof(risposta) - sizeof(long), 0) == -1) {
+                    if (errno == EINTR) continue;
+                    break;
+                }
+            }
+            rilascia_postazione(semid, stato, tipo);
+        }
 
         /* barriera di fine giornata verso il responsabile */
         sem_signal_idx(semid, SEM_BARRIERA_READY);

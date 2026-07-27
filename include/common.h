@@ -19,6 +19,7 @@
 #define FTOK_PATH_MSGQ_COFFEE   "src/common/stats.c"
 #define FTOK_PATH_MSGQ_CASSA    "src/common/ipc_utils.c"
 #define FTOK_PATH_MSGQ_GRUPPO   "src/common/stats.c"
+#define FTOK_PATH_MSGQ_ADDUSERS "src/common/simtime.c"
 
 #define FTOK_PROJ_ID_SHM_STAZIONI 'A'
 #define FTOK_PROJ_ID_SHM_STATS    'B'
@@ -28,6 +29,7 @@
 #define FTOK_PROJ_ID_MSGQ_COFFEE  'F'
 #define FTOK_PROJ_ID_MSGQ_CASSA   'G'
 #define FTOK_PROJ_ID_MSGQ_GRUPPO  'H'
+#define FTOK_PROJ_ID_MSGQ_ADDUSERS 'I'
 
 /* ======================================================================
  * Limiti statici (per dimensionare array in shared memory / messaggi)
@@ -249,10 +251,16 @@ typedef struct {
     int    tipo_caffe[MAX_GRUPPO];
 } MsgRichiestaCassa;
 
-/* Il cassiere risponde singolarmente a ciascun membro del gruppo. */
+/* Il cassiere risponde singolarmente a ciascun membro del gruppo.
+ * totale_pagato == -1 e' una sentinella: significa che la cassa ha
+ * chiuso prima di poter incassare questa richiesta (rimasta in coda a
+ * fine giornata), quindi il pagamento NON e' andato a buon fine e
+ * l'utente rinuncia al pasto, pur avendo gia' ottenuto i piatti dalle
+ * stazioni di distribuzione (sez. 5.5). Un pagamento riuscito e' sempre
+ * >= 0. */
 typedef struct {
     long mtype;             /* pid del membro */
-    int  totale_pagato;     /* in centesimi, sconto ticket gia' applicato */
+    int  totale_pagato;     /* in centesimi, sconto ticket gia' applicato; -1 = non pagato */
     int  sconto_applicato;  /* in centesimi */
 } MsgRispostaCassa;
 
@@ -279,6 +287,29 @@ typedef struct {
     int   ha_caffe;
     int   tipo_caffe;
 } MsgOrdineGruppo;
+
+/* ======================================================================
+ * Messaggio: richiesta di aggiunta utenti (versione completa, sez. 6)
+ *
+ * L'eseguibile ./bin/add_users NON crea processi direttamente: si limita
+ * a inviare al responsabile una richiesta su questa coda. E' sempre il
+ * responsabile a fare fork/exec dei nuovi utenti, cosi' che questi
+ * nascano automaticamente nel suo stesso process group (un figlio eredita
+ * il pgid del padre) e possano essere raggiunti da killpg() e attesi con
+ * waitpid() esattamente come quelli creati all'avvio. Delegare la fork
+ * ad add_users stesso non funzionerebbe se invocato da un terminale
+ * diverso da quello del responsabile: setpgid() puo' unire un processo
+ * solo a un process group della propria sessione, quindi fallirebbe con
+ * EPERM e i nuovi utenti non riceverebbero mai i segnali di fine
+ * giornata/simulazione, bloccando per sempre la barriera del responsabile.
+ * ====================================================================== */
+
+#define MSG_ADDUSERS_RICHIESTA 1L
+
+typedef struct {
+    long mtype;      /* sempre MSG_ADDUSERS_RICHIESTA */
+    int  n_utenti;   /* numero di nuovi utenti richiesti */
+} MsgRichiestaAddUsers;
 
 /* ======================================================================
  * Semafori

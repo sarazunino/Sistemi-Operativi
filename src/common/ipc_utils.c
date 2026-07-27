@@ -27,6 +27,7 @@ static int g_msgq_secondi    = -1;
 static int g_msgq_coffee     = -1;
 static int g_msgq_cassa      = -1;
 static int g_msgq_gruppo     = -1;
+static int g_msgq_addusers   = -1;
 
 /* ======================================================================
  * Utility
@@ -234,6 +235,10 @@ int msgq_gruppo_get(int create) {
     return msgq_get_generic(FTOK_PATH_MSGQ_GRUPPO,FTOK_PROJ_ID_MSGQ_GRUPPO,create);
 }
 
+int msgq_addusers_get(int create) {
+    return msgq_get_generic(FTOK_PATH_MSGQ_ADDUSERS, FTOK_PROJ_ID_MSGQ_ADDUSERS, create);
+}
+
 long msgq_num_messaggi(int msgid) {
     struct msqid_ds info;
     if (msgctl(msgid, IPC_STAT, &info) == -1)
@@ -263,7 +268,7 @@ int msgq_svuota(int msgid) {
  * Cleanup
  * ====================================================================== */
 
-void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo) {
+void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo, int msgq_addusers) {
     if (shm_stazioni_id != -1)
         shmctl(shm_stazioni_id, IPC_RMID, NULL);
     if (shm_stats_id != -1)
@@ -280,17 +285,20 @@ void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_
         msgctl(msgq_cassa, IPC_RMID, NULL);
     if (msgq_gruppo != -1)
         msgctl(msgq_gruppo, IPC_RMID, NULL);
+    if (msgq_addusers != -1)
+        msgctl(msgq_addusers, IPC_RMID, NULL);
 }
 
-void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo) {
+void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo, int msgq_addusers) {
     g_shm_stazioni_id = shm_stazioni_id;
     g_shm_stats_id    = shm_stats_id;
     g_semid = semid;
-    g_msgq_primi   = msgq_primi;
-    g_msgq_secondi = msgq_secondi;
-    g_msgq_coffee  = msgq_coffee;
-    g_msgq_cassa   = msgq_cassa;
-    g_msgq_gruppo  = msgq_gruppo;
+    g_msgq_primi     = msgq_primi;
+    g_msgq_secondi   = msgq_secondi;
+    g_msgq_coffee    = msgq_coffee;
+    g_msgq_cassa     = msgq_cassa;
+    g_msgq_gruppo    = msgq_gruppo;
+    g_msgq_addusers  = msgq_addusers;
 }
 
 /* Il responsabile e' l'unico processo che crea risorse IPC: se viene
@@ -299,7 +307,8 @@ static void cleanup_signal_handler(int signo) {
     (void)signo;
     killpg(0, SIGTERM);
     ipc_cleanup_all(g_shm_stazioni_id, g_shm_stats_id, g_semid, g_msgq_primi,
-                    g_msgq_secondi, g_msgq_coffee, g_msgq_cassa, g_msgq_gruppo);
+                    g_msgq_secondi, g_msgq_coffee, g_msgq_cassa, g_msgq_gruppo,
+                    g_msgq_addusers);
     _exit(EXIT_FAILURE);
 }
 
