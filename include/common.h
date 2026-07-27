@@ -18,7 +18,6 @@
 #define FTOK_PATH_MSGQ_SECONDI  "src/common/config.c"
 #define FTOK_PATH_MSGQ_COFFEE   "src/common/stats.c"
 #define FTOK_PATH_MSGQ_CASSA    "src/common/ipc_utils.c"
-#define FTOK_PATH_MSGQ_TICKET     "src/common/ipc_utils.c"
 #define FTOK_PATH_MSGQ_GRUPPO   "src/common/stats.c"
 
 #define FTOK_PROJ_ID_SHM_STAZIONI 'A'
@@ -28,20 +27,19 @@
 #define FTOK_PROJ_ID_MSGQ_SECONDI 'E'
 #define FTOK_PROJ_ID_MSGQ_COFFEE  'F'
 #define FTOK_PROJ_ID_MSGQ_CASSA   'G'
-#define FTOK_PROJ_ID_MSGQ_TICKET  'I'
 #define FTOK_PROJ_ID_MSGQ_GRUPPO  'H'
 
 /* ======================================================================
  * Limiti statici (per dimensionare array in shared memory / messaggi)
  * ====================================================================== */
 
-#define MAX_PIATTI_PRIMI     4  
-#define MAX_PIATTI_SECONDI   4
-#define MAX_CONTORNI         4
-#define NOF_TIPI_CAFFE       4   
-#define MAX_DOLCI            4
+#define MAX_PIATTI_PRIMI     8
+#define MAX_PIATTI_SECONDI   8
+#define MAX_CONTORNI         8
+#define NOF_TIPI_CAFFE       4
+#define MAX_DOLCI            8
 #define MAX_NOME_PIATTO      32
-#define MAX_GRUPPO           8   
+#define MAX_GRUPPO           8
 #define NOF_WORKERS_MAX      32
 
 #define TERMINAZIONE_IN_CORSO 0
@@ -77,14 +75,14 @@ typedef enum {
 } TipoCaffe;
 
 typedef enum {
-    ESITO_OK = 0,
-    ESITO_SOSTITUITO,
-    ESITO_TIPO_ESAURITO
+    ESITO_OK = 0,          /* servito il piatto richiesto */
+    ESITO_SOSTITUITO,      /* piatto richiesto finito: servito un altro dello stesso tipo */
+    ESITO_TIPO_ESAURITO    /* tutti i piatti di quel tipo sono finiti */
 } EsitoServizio;
 
 typedef struct {
     char nome[MAX_NOME_PIATTO];
-    int  prezzo;
+    int  prezzo;           /* in centesimi */
 } Piatto;
 
 /* ======================================================================
@@ -105,7 +103,6 @@ typedef struct {
     int porzioni_disponibili[MAX_PIATTI_SECONDI];
     Piatto contorni[MAX_CONTORNI];
     int num_contorni;
-    int contorno_associato[MAX_PIATTI_SECONDI];
     int max_porzioni;
     int esaurito;
 } StatoStazioneSecondi;
@@ -128,9 +125,16 @@ typedef struct {
     int operatori_assegnati[NUM_STAZIONI];
     int operatori_in_pausa[NUM_STAZIONI];
 
+    /* utenti attualmente in coda presso una qualsiasi stazione */
     int utenti_in_attesa;
+    /* utenti che, alla chiusura della mensa, erano ancora in coda e hanno
+     * quindi rinunciato al pasto: e' il valore confrontato con
+     * OVERLOAD_THRESHOLD per la terminazione per overload (sez. 5.6) */
+    int utenti_in_coda_fine_giornata;
+
+    /* numero di processi figli attesi alle barriere di sincronizzazione
+     * (cresce se add_users inserisce nuovi utenti a simulazione avviata) */
     int nof_children_totali;
-    int processi_pronti;
 } StatoStazioni;
 
 /* ======================================================================
@@ -159,9 +163,8 @@ typedef struct {
     bool operatore_contato_oggi[NOF_WORKERS_MAX];
     bool operatore_contato_tot[NOF_WORKERS_MAX];
 
-    int tavoli_occupati;
-    int utenti_in_attesa_tavolo;
-    long utenti_che_hanno_mangiato;
+    long utenti_che_hanno_mangiato_oggi;
+    long utenti_che_hanno_mangiato_tot;
 
     long pause_oggi;
     long pause_tot;
@@ -177,15 +180,15 @@ typedef struct {
     long sconto_ticket_oggi;
     long sconto_ticket_tot;
 
-    long somma_attesa_ticket_oggi;
-    long conteggio_attesa_ticket_oggi;
-    long somma_attesa_ticket_tot;
-    long conteggio_attesa_ticket_tot;
+    double somma_attesa_ticket_oggi;
+    long   conteggio_attesa_ticket_oggi;
+    double somma_attesa_ticket_tot;
+    long   conteggio_attesa_ticket_tot;
 
     double somma_attesa_complessiva_oggi;
-    long conteggio_attesa_complessivo_oggi;
+    long   conteggio_attesa_complessivo_oggi;
     double somma_attesa_complessiva_tot;
-    long conteggio_attesa_complessivo_tot;
+    long   conteggio_attesa_complessivo_tot;
 
     int giorno_corrente;
     int motivo_terminazione;
@@ -197,31 +200,42 @@ typedef struct {
 
 #define MSG_RICHIESTA 1L
 
+/* Richiesta inviata dall'utente alla coda della stazione. Il campo
+ * tipo_piatto indica quale stazione/servizio: TIPO_PRIMO (stazione primi),
+ * TIPO_SECONDO (stazione secondi, con eventuale contorno), TIPO_DOLCE
+ * (visita alla stazione coffee, che eroga dolce e/o caffe' in un colpo
+ * solo: dolce_idx < 0 => niente dolce, tipo_caffe < 0 => niente caffe'). */
 typedef struct {
-    long mtype;
-    pid_t  utente_pid;
+    long   mtype;         /* sempre MSG_RICHIESTA */
+    pid_t  utente_pid;    /* mtype con cui l'operatore risponde */
     int    tipo_piatto;
-    int    scelta_idx;
-    int    contorno_idx;
-    int    tipo_caffe;
-    int    dolce_idx;
+    int    scelta_idx;    /* indice del primo/secondo desiderato */
+    int    contorno_idx;  /* stazione secondi: contorno scelto, -1 = nessuno */
+    int    tipo_caffe;    /* stazione coffee: TipoCaffe desiderato, -1 = nessuno */
+    int    dolce_idx;     /* stazione coffee: dolce desiderato, -1 = nessuno */
 } MsgRichiestaCibo;
 
 typedef struct {
-    long mtype;
-    int  esito;
-    int  piatto_idx;
-    int  prezzo;
+    long mtype;           /* pid dell'utente destinatario */
+    int  esito;           /* EsitoServizio */
+    int  piatto_idx;      /* indice effettivamente servito (puo' differire) */
+    int  contorno_idx;    /* contorno effettivamente servito, -1 se assente */
+    int  prezzo;          /* prezzo del/i piatto/i erogato/i, in centesimi */
 } MsgRispostaCibo;
 
 /* ======================================================================
  * Messaggi per la coda cassa
  * ====================================================================== */
 
+/* Richiesta di pagamento: sempre inviata dal capogruppo, che ha gia'
+ * raccolto gli ordini di tutti i membri del proprio gruppo (sez. 6:
+ * "per mangiare insieme devono andare a pagare solo dopo essersi
+ * riforniti di tutti i piatti che desiderano acquistare"). Un utente
+ * singolo e' semplicemente un gruppo di un solo membro. */
 typedef struct {
-    long   mtype;
-    pid_t  richiedente_pid;
-    int    num_membri;
+    long   mtype;                    /* sempre MSG_RICHIESTA */
+    pid_t  richiedente_pid;          /* pid del capogruppo */
+    int    num_membri;               /* membri effettivamente presenti alla cassa */
     pid_t  membri_pid[MAX_GRUPPO];
     int    ha_ticket[MAX_GRUPPO];
     int    ha_primo[MAX_GRUPPO];
@@ -235,18 +249,25 @@ typedef struct {
     int    tipo_caffe[MAX_GRUPPO];
 } MsgRichiestaCassa;
 
+/* Il cassiere risponde singolarmente a ciascun membro del gruppo. */
 typedef struct {
-    long mtype;
-    int  totale_pagato;
+    long mtype;             /* pid del membro */
+    int  totale_pagato;     /* in centesimi, sconto ticket gia' applicato */
+    int  sconto_applicato;  /* in centesimi */
 } MsgRispostaCassa;
 
 /* ======================================================================
  * Messaggio: membro di un gruppo -> capogruppo (pre-cassa)
  * ====================================================================== */
 
+/* Ogni membro invia esattamente un messaggio al giorno al proprio
+ * capogruppo, anche quando non partecipa al pranzo (partecipa = 0):
+ * cosi' il capogruppo sa sempre quanti messaggi attendere e non resta
+ * mai bloccato indefinitamente. */
 typedef struct {
-    long  mtype;
+    long  mtype;          /* pid del capogruppo */
     pid_t membro_pid;
+    int   partecipa;      /* 0 = non pranza oggi / non ha ottenuto piatti */
     int   ha_ticket;
     int   ha_primo;
     int   primo_idx;
@@ -300,7 +321,7 @@ static inline const char *nome_stazione(TipoStazione s) {
         case STAZIONE_SECONDI: return "SECONDI";
         case STAZIONE_COFFEE:  return "COFFEE";
         case STAZIONE_CASSA:   return "CASSA";
-        default:                 return "?";
+        default:               return "?";
     }
 }
 

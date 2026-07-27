@@ -70,6 +70,7 @@ Config config_load(const char *path) {
         {"REFILL_VARIABILITY_PERCENT", &cfg.refill_variability_percent, NULL, NULL, CONFIG_INT},
 
         /* Probabilità menu */
+        {"PROB_GO_TO_MENSA", &cfg.prob_vado_in_mensa, NULL, NULL, CONFIG_INT},
         {"PROB_PRIMO", &cfg.prob_primo, NULL, NULL, CONFIG_INT},
         {"PROB_SECONDO_CONTORNO", &cfg.prob_secondo_contorno, NULL, NULL, CONFIG_INT},
         {"PROB_DOLCE", &cfg.prob_dolce, NULL, NULL, CONFIG_INT},
@@ -174,15 +175,13 @@ Config config_load(const char *path) {
 void config_print(const Config *cfg) {
     printf("\n=== Configurazione caricata ===\n");
     printf("Utenti=%d Worker=%d Tavoli=%d\n", cfg->nof_users, cfg->nof_workers, cfg->nof_table_seats);
-    printf("Postazioni: primi=%d secondi=%d coffee=%d cassa=%d\n", cfg->nof_wk_seats_primi, cfg->nof_wk_seats_secondi,
-           cfg->nof_wk_seats_coffee, cfg->nof_wk_seats_cassa);
-    printf("Servizi: primi=%d secondi=%d coffee=%d cassa=%d\n", cfg->avg_srvc_primi, cfg->avg_srvc_main_course, 
-           cfg->avg_srvc_coffee, cfg->avg_srvc_cassa);
-    printf("Refill: primi=%d secondi=%d max(%d,%d)\n", cfg->avg_refill_primi, cfg->avg_refill_secondi,
-           cfg->max_porzioni_primi, cfg->max_porzioni_secondi);
-    printf("Ticket: percentuale=%d%% sconto=%d%%\n", cfg->ticket_percentage, cfg->ticket_discount_pct);
-    printf("Simulazione: giorni=%d durata_giorno=%d N_NANO_SECS=%ld\n",cfg->sim_duration,
-           cfg->day_duration, cfg->n_nano_secs);
+    printf("Postazioni: primi=%d secondi=%d coffee=%d cassa=%d\n", cfg->nof_wk_seats_primi, cfg->nof_wk_seats_secondi, cfg->nof_wk_seats_coffee, cfg->nof_wk_seats_cassa);
+    printf("Servizi: primi=%d secondi=%d coffee=%d cassa=%d\n", cfg->avg_srvc_primi, cfg->avg_srvc_main_course,  cfg->avg_srvc_coffee, cfg->avg_srvc_cassa);
+    printf("Refill: primi=%d secondi=%d max(%d,%d) ogni ~%ds +-%d%%\n", cfg->avg_refill_primi, cfg->avg_refill_secondi, cfg->max_porzioni_primi, cfg->max_porzioni_secondi, cfg->avg_refill_time, cfg->refill_variability_percent);
+    printf("Prezzi (cent): primo=%d secondo=%d dolce=%d caffe=%d\n", cfg->price_primi, cfg->price_secondi, cfg->price_dolce, cfg->price_coffee);
+    printf("Ticket: percentuale=%d%% sconto=%d%% lettori=%d\n", cfg->ticket_percentage, cfg->ticket_discount_pct, cfg->nof_ticket_readers);
+    printf("Gruppi: max %d utenti; overload oltre %d utenti in coda\n", cfg->max_users_per_group, cfg->overload_threshold);
+    printf("Simulazione: giorni=%d durata_giorno=%d N_NANO_SECS=%ld\n",cfg->sim_duration, cfg->day_duration, cfg->n_nano_secs);
     printf("Menu file: %s\n", cfg->menu_file_path);
     printf("CSV output: %s\n", cfg->csv_output_dir);
 }

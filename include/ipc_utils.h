@@ -125,6 +125,22 @@ void sem_wait_idx(int semid, int idx);
  */
 void sem_signal_idx(int semid, int idx);
 
+/**
+ * @brief Esegue l'operazione P (wait) sul semaforo indicato, ma ritorna
+ *        se l'attesa viene interrotta da un segnale.
+ *
+ * Serve a tutte le attese che devono poter essere abbandonate a fine
+ * giornata o a fine simulazione (postazioni, tavoli, lettori di ticket):
+ * senza questa variante un processo bloccato su una risorsa satura non
+ * raggiungerebbe mai la barriera di fine giornata.
+ *
+ * @param semid Identificatore del set di semafori.
+ * @param idx Indice del semaforo all'interno del set.
+ * @return 0 se la risorsa e' stata acquisita, -1 se l'attesa e' stata
+ *         interrotta da un segnale o la risorsa non esiste piu'.
+ */
+int sem_wait_idx_intr(int semid, int idx);
+
 static inline int sem_mutex_stato_di(TipoStazione s) {
     switch (s) {
         case STAZIONE_PRIMI:   return SEM_MUTEX_STATO_PRIMI;
@@ -196,13 +212,28 @@ int msgq_cassa_get(int create);
 int msgq_gruppo_get(int create);
 
 /**
- * @brief Ottiene la coda messaggi della stazione lettura ticket.
+ * @brief Restituisce il numero di messaggi attualmente presenti in coda.
  *
- * @param create Se diverso da zero crea la coda.
+ * Usata dagli utenti per stimare la lunghezza delle file alle varie
+ * stazioni e decidere in quale coda inserirsi per prima (sez. 5.5).
  *
- * @return Identificatore della coda.
+ * @param msgid Identificatore della coda di messaggi.
+ * @return Numero di messaggi in coda, 0 se la coda non e' interrogabile.
  */
-int msgq_ticket_get(int create);
+long msgq_num_messaggi(int msgid);
+
+/**
+ * @brief Svuota completamente una coda di messaggi (non bloccante).
+ *
+ * Usata dal responsabile alla chiusura di ogni giornata, quando nessun
+ * altro processo sta usando le code: elimina le richieste rimaste
+ * inevase e le risposte non ritirate dagli utenti che hanno rinunciato,
+ * in modo che ogni giornata inizi con le code pulite.
+ *
+ * @param msgid Identificatore della coda di messaggi.
+ * @return Numero di messaggi scartati.
+ */
+int msgq_svuota(int msgid);
 
 /* --------------------------------------------------------------------
  * Cleanup
@@ -220,7 +251,7 @@ int msgq_ticket_get(int create);
  * @param msgq_cassa Coda dei messaggi della cassa.
  * @param msgq_gruppo Coda dei messaggi dei gruppi.
  */
-void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_ticket, int msgq_gruppo);
+void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo);
 
 /**
  * @brief Registra gli handler dei segnali per la pulizia automatica delle risorse IPC.
@@ -240,6 +271,6 @@ void ipc_register_cleanup_on_signal(void);
  * @param msgq_cassa Coda dei messaggi della cassa.
  * @param msgq_gruppo Coda dei messaggi dei gruppi.
  */
-void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_ticket,int msgq_gruppo);
+void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo);
 
 #endif /* IPC_UTILS_H */

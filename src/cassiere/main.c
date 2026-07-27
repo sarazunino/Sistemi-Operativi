@@ -1,6 +1,7 @@
 #include "common.h"
-#include "ipc_utils.h"
 #include "config.h"
+#include "ipc_utils.h"
+#include "simtime.h"
 #include "stats.h"
 
 #include <stdio.h>
@@ -8,145 +9,215 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
-#include <time.h>
 #include <errno.h>
 #include <sys/msg.h>
-#include <sys/sem.h>
 
-/* Processo cassiere: gestisce i pagamenti degli utenti presso la
- * stazione cassa. Ricalca la struttura del processo operatore
- * (sez. 5.3/5.4 del testo): compete per una postazione cassa, lavora
- * per tutta la giornata con possibilita' di pause, e si ferma
- * automaticamente (senza attesa attiva) se SEM_CASSA_ATTIVA e' a 0
- * a causa di un communication_disorder in corso (versione completa). */
+/* ======================================================================
+ * Processo operatore cassa (sez. 5.4).
+ *
+ * Ricalca la struttura del processo operatore: ogni giornata compete per
+ * una postazione della stazione cassa, serve le richieste di pagamento e
+ * puo' concedersi fino a NOF_PAUSE pause senza mai lasciare la cassa
+ * sguarnita.
+ *
+ * Ogni richiesta di pagamento arriva dal capogruppo e contiene l'ordine
+ * di tutti i membri del gruppo (sez. 6: si paga insieme, dopo essersi
+ * riforniti di tutti i piatti). Il cassiere calcola l'importo di ciascun
+ * membro, applica lo sconto agli utenti con ticket, aggiorna il ricavo e
+ * risponde singolarmente a ogni membro.
+ *
+ * Se il processo communication_disorder ha azzerato SEM_CASSA_ATTIVA, il
+ * cassiere si blocca in attesa passiva su quel semaforo prima di
+ * incassare, e riprende non appena il guasto e' risolto.
+ * ====================================================================== */
 
-static volatile sig_atomic_t running = 1;
-static volatile sig_atomic_t giorno_finito = 0;
+static volatile sig_atomic_t giorno_finito      = 0;
+static volatile sig_atomic_t simulazione_finita = 0;
 
-static void handle_sigterm(int sig) { (void)sig; running = 0; }
-static void handle_sigusr1(int sig) { (void)sig; giorno_finito = 1; }
+static void handler_fine_giorno(int signo)      { (void)signo; giorno_finito = 1; }
+static void handler_fine_simulazione(int signo) { (void)signo; simulazione_finita = 1; }
 
-static int rand_intorno(int media, int pct) {
-    if (media <= 0) return 1;
-    int delta = (media * pct) / 100;
-    int mn = media - delta; if (mn < 1) mn = 1;
-    int mx = media + delta; if (mx < mn) mx = mn;
-    return mn + rand() % (mx - mn + 1);
-}
+static int devo_fermarmi(void) { return giorno_finito || simulazione_finita; }
 
-static int prendi_postazione(int semid) {
-    struct sembuf op = { (unsigned short)SEM_POSTAZIONI_CASSA, -1, 0 };
-    while (semop(semid, &op, 1) == -1) {
-        if (errno == EINTR) { if (giorno_finito || !running) return 0; continue; }
-        perror("semop postazioni cassa");
+/* ======================================================================
+ * Postazioni e pause: stessa politica degli operatori di distribuzione
+ * ====================================================================== */
+
+static int acquisisci_postazione(int semid, StatoStazioni *stato) {
+    if (sem_wait_idx_intr(semid, SEM_POSTAZIONI_CASSA) == -1)
         return 0;
-    }
+
+    sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
+    stato->postazioni_libere[STAZIONE_CASSA]--;
+    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
     return 1;
 }
 
+static void rilascia_postazione(int semid, StatoStazioni *stato) {
+    sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
+    stato->postazioni_libere[STAZIONE_CASSA]++;
+    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
+    sem_signal_idx(semid, SEM_POSTAZIONI_CASSA);
+}
+
+static int prova_a_mettersi_in_pausa(int semid, StatoStazioni *stato) {
+    int concesso;
+
+    sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
+    int occupate = stato->postazioni_totali[STAZIONE_CASSA] - stato->postazioni_libere[STAZIONE_CASSA];
+    concesso = (occupate > 1);
+    if (concesso) stato->operatori_in_pausa[STAZIONE_CASSA]++;
+    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
+
+    return concesso;
+}
+
+static void rientra_dalla_pausa(int semid, StatoStazioni *stato) {
+    sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
+    stato->operatori_in_pausa[STAZIONE_CASSA]--;
+    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
+}
+
+/* ======================================================================
+ * Calcolo dell'importo dovuto da un singolo membro del gruppo
+ * ====================================================================== */
+
+static int importo_membro(const Config *cfg, const MsgRichiestaCassa *req, int i) {
+    int totale = 0;
+    if (req->ha_primo[i])   totale += cfg->price_primi;
+    if (req->ha_secondo[i]) totale += cfg->price_secondi;   /* contorno incluso */
+    if (req->ha_dolce[i])   totale += cfg->price_dolce;
+    if (req->ha_caffe[i])   totale += cfg->price_coffee;
+    return totale;
+}
+
+/* ======================================================================
+ * Incasso di un intero gruppo
+ * ====================================================================== */
+
+static void incassa_gruppo(const Config *cfg, int semid, int mq_cassa,
+                           Statistiche *stats, const MsgRichiestaCassa *req) {
+    int num = req->num_membri;
+    if (num < 1) num = 1;
+    if (num > MAX_GRUPPO) num = MAX_GRUPPO;
+
+    for (int i = 0; i < num; i++) {
+        /* il guasto ai pagamenti automatici blocca la cassa: attesa
+         * passiva sul semaforo, nessuna attesa attiva (sez. 6) */
+        sem_wait_idx(semid, SEM_CASSA_ATTIVA);
+        sem_signal_idx(semid, SEM_CASSA_ATTIVA);
+
+        /* sez. 5: tempo di servizio nell'intorno +-20% di AVG_SRVC_CASSA */
+        sim_sleep_sec(cfg->n_nano_secs, sim_rand_intorno(cfg->avg_srvc_cassa, 20));
+
+        int totale = importo_membro(cfg, req, i);
+        int sconto = 0;
+        if (req->ha_ticket[i] && cfg->ticket_discount_pct > 0)
+            sconto = (totale * cfg->ticket_discount_pct) / 100;
+
+        int pagato = totale - sconto;
+
+        stats_record_ricavo(stats, semid, pagato);
+        stats_record_ticket(stats, semid, req->ha_ticket[i] != 0, sconto);
+
+        MsgRispostaCassa resp;
+        memset(&resp, 0, sizeof(resp));
+        resp.mtype            = (long)req->membri_pid[i];
+        resp.totale_pagato    = pagato;
+        resp.sconto_applicato = sconto;
+
+        while (msgsnd(mq_cassa, &resp, sizeof(resp) - sizeof(long), 0) == -1) {
+            if (errno == EINTR) continue;
+            if (errno != EIDRM && errno != EINVAL) perror("cassiere: msgsnd ricevuta");
+            break;
+        }
+    }
+}
+
+/* ======================================================================
+ * MAIN
+ * ====================================================================== */
+
 int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-
-    srand((unsigned)getpid() ^ (unsigned)time(NULL));
-
-    struct sigaction sa_t, sa_u;
-    memset(&sa_t, 0, sizeof(sa_t)); sa_t.sa_handler = handle_sigterm;
-    sigaction(SIGTERM, &sa_t, NULL); sigaction(SIGINT, &sa_t, NULL);
-    memset(&sa_u, 0, sizeof(sa_u)); sa_u.sa_handler = handle_sigusr1;
-    sigaction(SIGUSR1, &sa_u, NULL);
-
-    Config cfg = config_load(CONFIG_PATH_DEFAULT);
-
-    int semid = sem_set_get(0);
-    StatoStazioni *stato = shm_stazioni_attach(shm_stazioni_get(0));
-    Statistiche  *stats  = shm_stats_attach(shm_stats_get(0));
-    int msgq_cassa = msgq_cassa_get(0);
-
-    if (semid == -1 || msgq_cassa == -1) {
-        fprintf(stderr, "cassiere: errore nell'acquisizione delle risorse IPC\n");
+    if (argc < 3) {
+        fprintf(stderr, "uso: %s <config_path> <id_operatore>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    int avg_srvc = cfg.avg_srvc_cassa;
-    int pct = 20; /* +-20%, come da specifica sez. 5 */
+    const char *config_path = argv[1];
+    int id = atoi(argv[2]);
 
-    /* barriera iniziale: segnala che l'inizializzazione e' completa */
+    Config cfg = config_load(config_path);
+    sim_srand();
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handler_fine_giorno;
+    sa.sa_flags = 0;  /* NIENTE SA_RESTART */
+    sigaction(SIGUSR1, &sa, NULL);
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handler_fine_simulazione;
+    sa.sa_flags = 0;
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT,  &sa, NULL);
+
+    int semid      = sem_set_get(0);
+    int mq_cassa   = msgq_cassa_get(0);
+    StatoStazioni *stato = shm_stazioni_attach(shm_stazioni_get(0));
+    Statistiche   *stats = shm_stats_attach(shm_stats_get(0));
+
+    /* fine inizializzazione */
     sem_signal_idx(semid, SEM_BARRIERA_READY);
 
-    while (running) {
+    while (!simulazione_finita) {
         sem_wait_idx(semid, SEM_GATE_START);
-        if (!running) break;
-        giorno_finito = 0;
+        if (simulazione_finita) break;
 
-        int ho_postazione = prendi_postazione(semid);
+        giorno_finito = 0;
         int pause_fatte = 0;
 
-        if (ho_postazione) {
-            stats_record_operatore_attivo(stats, semid);
-        }
+        int postazione_occupata = acquisisci_postazione(semid, stato);
+        if (postazione_occupata) stats_record_operatore_attivo(stats, semid, id);
 
-        while (ho_postazione && !giorno_finito && running) {
-
-            /* Se il communication_disorder ha azzerato SEM_CASSA_ATTIVA,
-             * il cassiere si blocca qui (bloccante, no attesa attiva) fino
-             * a quando il guasto non viene risolto; poi rilascia subito
-             * il semaforo per non impedire agli altri di verificarlo. */
-            sem_wait_idx(semid, SEM_CASSA_ATTIVA);
-            sem_signal_idx(semid, SEM_CASSA_ATTIVA);
-
+        while (postazione_occupata && !devo_fermarmi()) {
             MsgRichiestaCassa req;
-            if (msgrcv(msgq_cassa, &req, sizeof(req) - sizeof(long), MSG_RICHIESTA, 0) == -1) {
+            if (msgrcv(mq_cassa, &req, sizeof(req) - sizeof(long), MSG_RICHIESTA, 0) == -1) {
                 if (errno == EINTR) continue;
-                if (errno == EIDRM) break;
+                if (errno != EIDRM && errno != EINVAL) perror("cassiere: msgrcv");
                 break;
             }
 
-            int totale = 0;
-            if (req.ha_primo)       totale += cfg.price_primi;
-            if (req.ha_secondo)     totale += cfg.price_secondi;
-            if (req.ha_dolce_caffe) totale += cfg.price_coffee;
+            incassa_gruppo(&cfg, semid, mq_cassa, stats, &req);
 
-            usleep((useconds_t)rand_intorno(avg_srvc, pct) * 1000);
+            if (!devo_fermarmi() && pause_fatte < cfg.nof_pause &&
+                sim_rand_range(0, 99) < cfg.pause_probability &&
+                prova_a_mettersi_in_pausa(semid, stato)) {
 
-            MsgRispostaCassa resp;
-            resp.mtype = req.richiedente_pid;
-            resp.totale_pagato = totale;
-            msgsnd(msgq_cassa, &resp, sizeof(resp) - sizeof(long), 0);
+                rilascia_postazione(semid, stato);
+                postazione_occupata = 0;
+                pause_fatte++;
+                stats_record_pausa(stats, semid);
 
-            stats_record_ricavo(stats, semid, totale);
+                sim_sleep_sec(cfg.n_nano_secs, sim_rand_range(cfg.min_pause_time, cfg.max_pause_time));
 
-            /* possibile pausa, solo se resta almeno un altro cassiere attivo */
-            if (pause_fatte < cfg.nof_pause && (rand() % 5 == 0)) {
-                sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
-                int attivi = stato->operatori_assegnati[STAZIONE_CASSA]
-                           - stato->operatori_in_pausa[STAZIONE_CASSA];
-                if (attivi > 1) {
-                    stato->operatori_in_pausa[STAZIONE_CASSA]++;
-                    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
+                rientra_dalla_pausa(semid, stato);
 
-                    sem_signal_idx(semid, SEM_POSTAZIONI_CASSA);
-                    stats_record_pausa(stats, semid);
-                    pause_fatte++;
-
-                    usleep((useconds_t)rand_intorno(avg_srvc, pct) * 3000);
-
-                    int rientrato = prendi_postazione(semid);
-
-                    sem_wait_idx(semid, SEM_MUTEX_STATO_CASSA);
-                    stato->operatori_in_pausa[STAZIONE_CASSA]--;
-                    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
-
-                    if (!rientrato || giorno_finito || !running) { ho_postazione = 0; break; }
-                } else {
-                    sem_signal_idx(semid, SEM_MUTEX_STATO_CASSA);
+                if (!devo_fermarmi()) {
+                    postazione_occupata = acquisisci_postazione(semid, stato);
+                    if (postazione_occupata)
+                        stats_record_operatore_attivo(stats, semid, id);
                 }
             }
         }
 
-        if (ho_postazione) sem_signal_idx(semid, SEM_POSTAZIONI_CASSA);
+        /* A mensa chiusa il cassiere lascia la postazione come gli altri
+         * operatori: gli utenti eventualmente ancora in fila alla cassa
+         * rinunciano al pasto, esattamente come chi resta in coda a una
+         * stazione di distribuzione (sez. 5.5), e vengono conteggiati fra
+         * gli utenti non serviti. */
+        if (postazione_occupata) rilascia_postazione(semid, stato);
 
-        /* segnala al responsabile che ha terminato la giornata */
         sem_signal_idx(semid, SEM_BARRIERA_READY);
     }
 

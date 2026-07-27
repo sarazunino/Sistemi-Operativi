@@ -1,13 +1,18 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+/* Tutti i tempi (AVG_SRVC_*, pause, consumo, refill, STOP_DURATION) sono
+ * espressi in SECONDI DI TEMPO SIMULATO: la conversione in tempo reale
+ * avviene tramite N_NANO_SECS (1 minuto simulato = N_NANO_SECS ns reali,
+ * quindi 1 secondo simulato = N_NANO_SECS/60 ns reali). Vedi simtime.h. */
+
 typedef struct {
 
     /* Parametri simulazione */
     int nof_workers;
     int nof_users;
     int nof_table_seats;
-    int avg_consumption_time;
+    int avg_consumption_time;   /* per piatto acquistato */
 
     /* Postazioni */
     int nof_wk_seats_primi;
@@ -30,12 +35,13 @@ typedef struct {
     int refill_variability_percent;
 
     /* Menu */
+    int prob_vado_in_mensa;
     int prob_primo;
     int prob_secondo_contorno;
     int prob_dolce;
     int prob_caffe;
 
-    /* Prezzi */
+    /* Prezzi (in centesimi) */
     int price_primi;
     int price_secondi;
     int price_dolce;
@@ -49,7 +55,7 @@ typedef struct {
 
     /* Giorni */
     int sim_duration;
-    int day_duration;
+    int day_duration;           /* minuti simulati per giornata */
     long n_nano_secs;
     int overload_threshold;
 

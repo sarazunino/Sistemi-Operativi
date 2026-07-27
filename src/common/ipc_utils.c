@@ -26,7 +26,6 @@ static int g_msgq_primi      = -1;
 static int g_msgq_secondi    = -1;
 static int g_msgq_coffee     = -1;
 static int g_msgq_cassa      = -1;
-static int g_msgq_ticket     = -1;
 static int g_msgq_gruppo     = -1;
 
 /* ======================================================================
@@ -157,15 +156,20 @@ void sem_set_init(int semid, const IpcSeatCounts *seats) {
     }
 }
 
-static void sem_op(int semid, int idx, int delta) { 
+static void sem_op(int semid, int idx, int delta) {
     struct sembuf op;
-    op.sem_num = idx;
-    op.sem_op  = delta;
+    op.sem_num = (unsigned short)idx;
+    op.sem_op  = (short)delta;
     op.sem_flg = 0;
 
     while (semop(semid, &op, 1) == -1) {
         if (errno == EINTR)
             continue;
+        /* il set di semafori non esiste piu': la simulazione e' finita e
+         * il responsabile ha gia' deallocato le IPC, quindi non e' un
+         * errore ma la normale conclusione del processo */
+        if (errno == EIDRM || errno == EINVAL)
+            _exit(EXIT_SUCCESS);
         perror("semop");
         exit(EXIT_FAILURE);
     }
@@ -177,6 +181,20 @@ void sem_wait_idx(int semid, int idx) {
 
 void sem_signal_idx(int semid, int idx) {
     sem_op(semid, idx, +1);
+}
+
+int sem_wait_idx_intr(int semid, int idx) {
+    struct sembuf op;
+    op.sem_num = (unsigned short)idx;
+    op.sem_op  = -1;
+    op.sem_flg = 0;
+
+    if (semop(semid, &op, 1) == -1) {
+        if (errno != EINTR && errno != EIDRM && errno != EINVAL)
+            perror("semop (interrompibile)");
+        return -1;
+    }
+    return 0;
 }
 
 /* ======================================================================
@@ -212,26 +230,46 @@ int msgq_cassa_get(int create) {
     return msgq_get_generic(FTOK_PATH_MSGQ_CASSA, FTOK_PROJ_ID_MSGQ_CASSA, create);
 }
 
-int msgq_ticket_get(int create) {
-    return msgq_get_generic( FTOK_PATH_MSGQ_TICKET, FTOK_PROJ_ID_MSGQ_TICKET, create);
-}
-
 int msgq_gruppo_get(int create) {
     return msgq_get_generic(FTOK_PATH_MSGQ_GRUPPO,FTOK_PROJ_ID_MSGQ_GRUPPO,create);
+}
+
+long msgq_num_messaggi(int msgid) {
+    struct msqid_ds info;
+    if (msgctl(msgid, IPC_STAT, &info) == -1)
+        return 0;
+    return (long)info.msg_qnum;
+}
+
+int msgq_svuota(int msgid) {
+    /* buffer dimensionato sul piu' grande dei messaggi del progetto,
+     * altrimenti msgrcv fallirebbe con E2BIG senza consumare nulla */
+    union {
+        MsgRichiestaCibo  richiesta_cibo;
+        MsgRispostaCibo   risposta_cibo;
+        MsgRichiestaCassa richiesta_cassa;
+        MsgRispostaCassa  risposta_cassa;
+        MsgOrdineGruppo   ordine;
+    } buf;
+
+    int scartati = 0;
+    while (msgrcv(msgid, &buf, sizeof(buf) - sizeof(long), 0, IPC_NOWAIT) != -1)
+        scartati++;
+
+    return scartati;
 }
 
 /* ======================================================================
  * Cleanup
  * ====================================================================== */
 
-void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_ticket, int msgq_gruppo) {
+void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo) {
     if (shm_stazioni_id != -1)
         shmctl(shm_stazioni_id, IPC_RMID, NULL);
     if (shm_stats_id != -1)
         shmctl(shm_stats_id, IPC_RMID, NULL);
     if (semid != -1)
         semctl(semid, 0, IPC_RMID);
-
     if (msgq_primi != -1)
         msgctl(msgq_primi, IPC_RMID, NULL);
     if (msgq_secondi != -1)
@@ -240,39 +278,38 @@ void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_
         msgctl(msgq_coffee, IPC_RMID, NULL);
     if (msgq_cassa != -1)
         msgctl(msgq_cassa, IPC_RMID, NULL);
-    if (msgq_ticket != -1)
-        msgctl(msgq_ticket, IPC_RMID, NULL);
     if (msgq_gruppo != -1)
         msgctl(msgq_gruppo, IPC_RMID, NULL);
 }
 
-void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_ticket, int msgq_gruppo) {
+void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo) {
     g_shm_stazioni_id = shm_stazioni_id;
     g_shm_stats_id    = shm_stats_id;
-
     g_semid = semid;
-
     g_msgq_primi   = msgq_primi;
     g_msgq_secondi = msgq_secondi;
     g_msgq_coffee  = msgq_coffee;
     g_msgq_cassa   = msgq_cassa;
-    g_msgq_ticket  = msgq_ticket;
     g_msgq_gruppo  = msgq_gruppo;
 }
 
+/* Il responsabile e' l'unico processo che crea risorse IPC: se viene
+ * interrotto (Ctrl-C) porta con se' tutti i figli e poi le dealloca. */
 static void cleanup_signal_handler(int signo) {
     (void)signo;
-
-    ipc_cleanup_all(g_shm_stazioni_id, g_shm_stats_id, g_semid,g_msgq_primi,g_msgq_secondi,g_msgq_coffee,g_msgq_cassa,g_msgq_ticket,g_msgq_gruppo);
-
+    killpg(0, SIGTERM);
+    ipc_cleanup_all(g_shm_stazioni_id, g_shm_stats_id, g_semid, g_msgq_primi,
+                    g_msgq_secondi, g_msgq_coffee, g_msgq_cassa, g_msgq_gruppo);
     _exit(EXIT_FAILURE);
 }
 
 void ipc_register_cleanup_on_signal(void) {
     struct sigaction sa;
-    memset(&sa,0,sizeof(sa));
+    memset(&sa, 0, sizeof(sa));
     sa.sa_handler = cleanup_signal_handler;
-
-    sigaction(SIGINT,&sa,NULL);
-    sigaction(SIGTERM,&sa,NULL);
+    sigemptyset(&sa.sa_mask);
+    sigaddset(&sa.sa_mask, SIGINT);
+    sigaddset(&sa.sa_mask, SIGTERM);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 }

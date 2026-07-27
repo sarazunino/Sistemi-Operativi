@@ -20,18 +20,51 @@ void stats_init_global(Statistiche *stats);
 void stats_init_daily(Statistiche *stats);
 
 /**
- * @brief Registra il servizio completo di un utente (dalla richiesta al
- *        pagamento) e il relativo tempo di attesa.
+ * @brief Registra il tempo di attesa di un utente presso una stazione.
+ *
+ * Va chiamata a ogni singola coda affrontata dall'utente; alimenta sia la
+ * media per stazione sia la media complessiva.
  *
  * @param stats     Puntatore alla struttura Statistiche condivisa.
  * @param semid     Identificatore del set di semafori per la mutua
  *                  esclusione sull'aggiornamento.
  * @param stazione  Stazione presso cui il tempo di attesa è stato rilevato
  *                  (primi, secondi, coffee, cassa).
- * @param wait_time Tempo di attesa dell'utente presso quella stazione,
- *                  in secondi (o unità di tempo simulato).
+ * @param wait_time Tempo di attesa dell'utente presso quella stazione, in
+ *                  millisecondi reali.
  */
-void stats_record_utente_servito(Statistiche *stats, int semid, TipoStazione stazione, double wait_time);
+void stats_record_attesa(Statistiche *stats, int semid, TipoStazione stazione, double wait_time);
+
+/**
+ * @brief Registra il tempo di attesa alla fila per la lettura del ticket.
+ *
+ * La lettura del ticket non e' una delle 4 stazioni della mensa, quindi
+ * viene contabilizzata a parte (versione completa, sez. 6).
+ *
+ * @param stats     Puntatore alla struttura Statistiche condivisa.
+ * @param semid     Identificatore del set di semafori.
+ * @param wait_time Tempo di attesa in millisecondi reali.
+ */
+void stats_record_attesa_ticket(Statistiche *stats, int semid, double wait_time);
+
+/**
+ * @brief Registra un utente servito, cioè che ha ottenuto almeno un piatto,
+ *        ha pagato alla cassa e ha consumato il pasto.
+ *
+ * Da chiamare una sola volta per utente e per giornata.
+ *
+ * @param stats Puntatore alla struttura Statistiche condivisa.
+ * @param semid Identificatore del set di semafori.
+ */
+void stats_record_utente_servito(Statistiche *stats, int semid);
+
+/**
+ * @brief Registra un utente che ha terminato di consumare il pasto al tavolo.
+ *
+ * @param stats Puntatore alla struttura Statistiche condivisa.
+ * @param semid Identificatore del set di semafori.
+ */
+void stats_record_utente_ha_mangiato(Statistiche *stats, int semid);
 
 /**
  * @brief Registra un utente che abbandona la mensa senza essere stato
