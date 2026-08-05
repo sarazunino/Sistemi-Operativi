@@ -19,8 +19,11 @@
  * Ogni giornata l'utente decide se recarsi in mensa, compone il proprio
  * menu a partire dai piatti pubblicati in memoria condivisa dal
  * responsabile, sceglie in quale coda mettersi in base alla lunghezza
- * delle code, ritira i piatti, paga alla cassa e consuma il pasto a un
- * tavolo.
+ * delle code, ritira primo/secondo, paga alla cassa (primo, secondo E
+ * l'eventuale dolce-caffe' desiderato, tutto insieme) e consuma il pasto
+ * a un tavolo; solo dopo aver mangiato passa alla stazione coffee a
+ * ritirare il dolce/caffe' gia' pagato (Figura 1 del testo: la stazione
+ * coffee segue la cassa, non la precede).
  *
  * Versione completa:
  *  - l'utente e' di tipo "con ticket" (TICKET_PERCENTAGE% dei casi) o
@@ -283,11 +286,8 @@ static void giro_stazioni(const Ctx *c, Ordine *o) {
         }
     }
 
-    /* dolce e caffe' si prendono per ultimi, e solo se non si e' desistito */
-    if (!devo_fermarmi() && (o->ha_primo || o->ha_secondo) &&
-        (o->vuole_dolce || o->vuole_caffe)) {
-        visita_stazione(c, STAZIONE_COFFEE, o);
-    }
+    /* dolce e caffe' NON si ritirano qui: si pagano insieme al resto ma si
+     * ritirano solo dopo aver mangiato primo/secondo (vedi prendi_dolce_caffe) */
 }
 
 /* ======================================================================
@@ -295,6 +295,12 @@ static void giro_stazioni(const Ctx *c, Ordine *o) {
  * gruppo di un solo membro: la logica e' quindi unica.
  * ====================================================================== */
 
+/* Il dolce e il caffe' si pagano in base al DESIDERIO espresso a menu
+ * (o->vuole_dolce/vuole_caffe), non al ritiro effettivo: il ritiro alla
+ * stazione coffee avviene solo dopo, a pasto principale concluso (vedi
+ * prendi_dolce_caffe). Se la stazione risultasse chiusa nel frattempo
+ * (drain di fine giornata), l'utente avrebbe pagato senza ottenerlo: caso
+ * limite raro, stesso tipo di race gia' nota per la cassa a fine giornata. */
 static void ordine_in_messaggio(const Ordine *o, int ha_ticket, MsgOrdineGruppo *m) {
     m->partecipa    = (o->ha_primo || o->ha_secondo);
     m->ha_ticket    = ha_ticket;
@@ -303,9 +309,9 @@ static void ordine_in_messaggio(const Ordine *o, int ha_ticket, MsgOrdineGruppo 
     m->ha_secondo   = o->ha_secondo;
     m->secondo_idx  = o->secondo_idx;
     m->contorno_idx = o->contorno_idx;
-    m->ha_dolce     = o->ha_dolce;
+    m->ha_dolce     = o->vuole_dolce;
     m->dolce_idx    = o->dolce_idx;
-    m->ha_caffe     = o->ha_caffe;
+    m->ha_caffe     = o->vuole_caffe;
     m->tipo_caffe   = o->tipo_caffe;
 }
 
@@ -438,13 +444,16 @@ static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
 }
 
 /* ======================================================================
- * Consumo del pasto: serve un posto libero fra gli NOF_TABLE_SEATS
- * complessivi, altrimenti si attende che se ne liberi uno (sez. 5.5).
- * Il tempo di consumo e' proporzionale al numero di piatti acquistati.
+ * Consumo del pasto principale (primo/secondo): serve un posto libero fra
+ * gli NOF_TABLE_SEATS complessivi, altrimenti si attende che se ne liberi
+ * uno (sez. 5.5). Il tempo di consumo e' proporzionale al numero di
+ * piatti. Il dolce/caffe' (gia' pagato) si ritira dopo, vedi
+ * prendi_dolce_caffe(): la Figura 1 del testo mostra la stazione coffee
+ * dopo la cassa e i tavoli, non prima.
  * ====================================================================== */
 
 static void consuma_pasto(const Ctx *c, const Ordine *o) {
-    int num_piatti = o->ha_primo + o->ha_secondo + o->ha_dolce + o->ha_caffe;
+    int num_piatti = o->ha_primo + o->ha_secondo;
     if (num_piatti < 1) num_piatti = 1;
 
     coda_entra(c);
@@ -457,7 +466,21 @@ static void consuma_pasto(const Ctx *c, const Ordine *o) {
     sim_sleep_sec(c->cfg->n_nano_secs, c->cfg->avg_consumption_time * num_piatti);
 
     sem_signal_idx(c->semid, SEM_TAVOLI);
-    stats_record_utente_ha_mangiato(c->stats, c->semid);
+}
+
+/* Dolce e caffe' si ritirano alla stazione coffee dopo aver mangiato
+ * primo/secondo: sono gia' stati pagati insieme al resto (vedi
+ * ordine_in_messaggio). Consumati "al banco", senza rioccupare un
+ * tavolo: evita di dover modellare un secondo ciclo di attesa/rilascio
+ * su SEM_TAVOLI per un'aggiunta di consumo marginale. */
+static void prendi_dolce_caffe(const Ctx *c, Ordine *o) {
+    if (devo_fermarmi() || !(o->vuole_dolce || o->vuole_caffe)) return;
+
+    if (visita_stazione(c, STAZIONE_COFFEE, o)) {
+        int num_piatti = o->ha_dolce + o->ha_caffe;
+        if (num_piatti > 0)
+            sim_sleep_sec(c->cfg->n_nano_secs, c->cfg->avg_consumption_time * num_piatti);
+    }
 }
 
 /* ======================================================================
@@ -475,7 +498,7 @@ static void giornata(const Ctx *c, int capogruppo, int num_membri, pid_t capo_pi
 
     if (vado_in_mensa && leggi_ticket(c)) {
         componi_menu(c, &o);
-        giro_stazioni(c, &o);
+        giro_stazioni(c, &o);   /* solo primo/secondo: dolce/caffe' dopo, vedi sotto */
     }
 
     int ha_pagato = 0;
@@ -486,6 +509,8 @@ static void giornata(const Ctx *c, int capogruppo, int num_membri, pid_t capo_pi
 
     if (ha_pagato) {
         consuma_pasto(c, &o);
+        prendi_dolce_caffe(c, &o);   /* dolce/caffe' gia' pagati: si ritirano ora */
+        stats_record_utente_ha_mangiato(c->stats, c->semid);
         stats_record_utente_servito(c->stats, c->semid);
     } else if (vado_in_mensa) {
         /* si e' recato in mensa ma non ha potuto pranzare: piatti esauriti

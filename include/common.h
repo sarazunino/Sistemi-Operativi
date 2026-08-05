@@ -348,14 +348,6 @@ typedef enum {
  * Helper di conversione stazione <-> stringa
  * ====================================================================== */
 
-static inline TipoStazione stazione_da_nome(const char *nome) {
-    if (strcmp(nome, "PRIMI") == 0)   return STAZIONE_PRIMI;
-    if (strcmp(nome, "SECONDI") == 0) return STAZIONE_SECONDI;
-    if (strcmp(nome, "COFFEE") == 0)  return STAZIONE_COFFEE;
-    if (strcmp(nome, "CASSA") == 0)   return STAZIONE_CASSA;
-    return (TipoStazione)-1;
-}
-
 static inline const char *nome_stazione(TipoStazione s) {
     switch (s) {
         case STAZIONE_PRIMI:   return "PRIMI";

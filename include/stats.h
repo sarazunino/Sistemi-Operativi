@@ -39,7 +39,7 @@ void stats_record_attesa(Statistiche *stats, int semid, TipoStazione stazione, d
  * @brief Registra il tempo di attesa alla fila per la lettura del ticket.
  *
  * La lettura del ticket non e' una delle 4 stazioni della mensa, quindi
- * viene contabilizzata a parte (versione completa, sez. 6).
+ * viene contabilizzata a parte.
  *
  * @param stats     Puntatore alla struttura Statistiche condivisa.
  * @param semid     Identificatore del set di semafori.
