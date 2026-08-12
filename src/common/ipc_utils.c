@@ -187,6 +187,15 @@ int sem_wait_idx_intr(int semid, int idx) {
     return 0;
 }
 
+int sem_getval_idx(int semid, int idx) {
+    int val = semctl(semid, idx, GETVAL);
+    if (val == -1 && (errno == EIDRM || errno == EINVAL))
+        return -1;
+    if (val == -1)
+        perror("semctl GETVAL");
+    return val;
+}
+
 /* Code messaggi */
 
 static int msgq_get_generic(const char *path, int proj_id, int create) {

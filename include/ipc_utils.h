@@ -136,6 +136,17 @@ void sem_signal_idx(int semid, int idx);
  */
 int sem_wait_idx_intr(int semid, int idx);
 
+/**
+ * @brief Legge il valore corrente di un semaforo senza modificarlo
+ *        (operazione non invasiva, utile per monitorare uno stato senza
+ *        competere per la risorsa).
+ *
+ * @param semid Identificatore del set di semafori.
+ * @param idx Indice del semaforo all'interno del set.
+ * @return Il valore corrente del semaforo, -1 se il set non esiste piu'.
+ */
+int sem_getval_idx(int semid, int idx);
+
 static inline int sem_mutex_stato_di(TipoStazione s) {
     switch (s) {
         case STAZIONE_PRIMI:   return SEM_MUTEX_STATO_PRIMI;

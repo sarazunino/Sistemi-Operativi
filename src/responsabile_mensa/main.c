@@ -290,6 +290,19 @@ static void registra_piatti_avanzati(Statistiche *stats, int semid, StatoStazion
     stats_record_piatto_avanzato(stats, semid, TIPO_SECONDO, avanzati_secondi);
 }
 
+/* Monitoraggio dello stato della cassa */
+static void controlla_stato_cassa(int semid, int *cassa_attiva_prec) {
+    int valore = sem_getval_idx(semid, SEM_CASSA_ATTIVA);
+    if (valore == -1 || valore == *cassa_attiva_prec) return;
+
+    if (valore == 0)
+        printf("[RESPONSABILE] Guasto rilevato: la cassa non e' al momento operativa.\n");
+    else
+        printf("[RESPONSABILE] La cassa e' tornata operativa.\n");
+
+    *cassa_attiva_prec = valore;
+}
+
 /* MAIN */
 
 int main(int argc, char *argv[]) {
@@ -379,6 +392,7 @@ int main(int argc, char *argv[]) {
     snprintf(csv_path, sizeof(csv_path), "%sstatistiche_simulazione.csv", cfg.csv_output_dir);
 
     int causa_overload = 0;
+    int cassa_attiva_prec = 1; 
 
     for (int giorno = 1; giorno <= cfg.sim_duration; giorno++) {
         printf("\n=================== INIZIO GIORNO %d ===================\n", giorno);
@@ -429,6 +443,7 @@ int main(int argc, char *argv[]) {
             refill_se_necessario(semid, STAZIONE_SECONDI, stato, cfg.avg_refill_secondi, intervallo, &minuti_refill_secondi, &cfg);
 
             gestisci_richieste_add_users(config_path, semid, stato, mq_addusers);
+            controlla_stato_cassa(semid, &cassa_attiva_prec);
         }
 
         int n_fine = leggi_n_children(semid, stato);
