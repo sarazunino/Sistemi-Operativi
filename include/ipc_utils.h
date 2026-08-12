@@ -129,11 +129,6 @@ void sem_signal_idx(int semid, int idx);
  * @brief Esegue l'operazione P (wait) sul semaforo indicato, ma ritorna
  *        se l'attesa viene interrotta da un segnale.
  *
- * Serve a tutte le attese che devono poter essere abbandonate a fine
- * giornata o a fine simulazione (postazioni, tavoli, lettori di ticket):
- * senza questa variante un processo bloccato su una risorsa satura non
- * raggiungerebbe mai la barriera di fine giornata.
- *
  * @param semid Identificatore del set di semafori.
  * @param idx Indice del semaforo all'interno del set.
  * @return 0 se la risorsa e' stata acquisita, -1 se l'attesa e' stata
@@ -223,9 +218,6 @@ int msgq_addusers_get(int create);
 /**
  * @brief Restituisce il numero di messaggi attualmente presenti in coda.
  *
- * Usata dagli utenti per stimare la lunghezza delle file alle varie
- * stazioni e decidere in quale coda inserirsi per prima (sez. 5.5).
- *
  * @param msgid Identificatore della coda di messaggi.
  * @return Numero di messaggi in coda, 0 se la coda non e' interrogabile.
  */
@@ -233,11 +225,6 @@ long msgq_num_messaggi(int msgid);
 
 /**
  * @brief Svuota completamente una coda di messaggi (non bloccante).
- *
- * Usata dal responsabile alla chiusura di ogni giornata, quando nessun
- * altro processo sta usando le code: elimina le richieste rimaste
- * inevase e le risposte non ritirate dagli utenti che hanno rinunciato,
- * in modo che ogni giornata inizi con le code pulite.
  *
  * @param msgid Identificatore della coda di messaggi.
  * @return Numero di messaggi scartati.

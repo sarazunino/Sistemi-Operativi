@@ -6,27 +6,6 @@
 #include <stdlib.h>
 #include <sys/msg.h>
 
-/* ======================================================================
- * Eseguibile della versione completa (sez. 6): invocato da linea di
- * comando, da un terminale qualsiasi, chiede al responsabile mensa di
- * aggiungere alla simulazione gia' avviata dei nuovi processi utente
- * oltre a quelli creati inizialmente.
- *
- *   ./bin/add_users [n_utenti] [config_path]
- *
- * NON crea i processi direttamente: si limita a inviare una richiesta
- * sulla coda dedicata. E' il responsabile a fare fork/exec dei nuovi
- * utenti (vedi common.h, MsgRichiestaAddUsers), cosi' che nascano nel suo
- * stesso process group e possano essere raggiunti dai suoi segnali di
- * fine giornata/fine simulazione e attesi con waitpid() a chiusura: se
- * fosse add_users a fare la fork, il tentativo del figlio di unirsi al
- * process group del responsabile fallirebbe con EPERM ogni volta che
- * add_users viene lanciato da un terminale diverso da quello del
- * responsabile (setpgid richiede che il process group di destinazione
- * appartenga alla propria stessa sessione), lasciando i nuovi utenti
- * sordi a SIGUSR1/SIGTERM e bloccando per sempre la barriera di fine
- * giornata del responsabile.
- * ====================================================================== */
 
 int main(int argc, char *argv[]) {
     const char *config_path = (argc > 2) ? argv[2] : CONFIG_PATH_DEFAULT;

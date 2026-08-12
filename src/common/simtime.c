@@ -5,9 +5,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-/* Nanosecondi reali corrispondenti a un secondo simulato. Non scende mai
- * sotto 1 ns, cosi' nanosleep() riceve sempre un valore valido anche con
- * configurazioni molto "accelerate". */
 static long ns_per_secondo_simulato(long n_nano_secs) {
     long ns = n_nano_secs / 60;
     return (ns > 0) ? ns : 1;

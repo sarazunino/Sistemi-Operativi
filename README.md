@@ -1,6 +1,6 @@
 # Mensa Simulator
 
-Simulazione a processi del Servizio Mensa "Oasi del Golfo" (versione completa).
+Simulazione del Servizio Mensa "Oasi del Golfo".
 
 ## Struttura
 
@@ -33,7 +33,7 @@ oppure, ripulendo prima eventuali IPC rimaste da esecuzioni precedenti:
 
     ./scripts/run_simulation.sh config/config.conf
 
-Configurazioni che forzano le due cause di terminazione (sez. 5.6):
+Configurazioni che forzano le due cause di terminazione:
 
     ./bin/responsabile_mensa config/config_timeout.conf    # TIMEOUT
     ./bin/responsabile_mensa config/config_overload.conf   # OVERLOAD

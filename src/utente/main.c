@@ -13,32 +13,7 @@
 #include <errno.h>
 #include <sys/msg.h>
 
-/* ======================================================================
- * Processo utente (sez. 5.5 e sez. 6).
- *
- * Ogni giornata l'utente decide se recarsi in mensa, compone il proprio
- * menu a partire dai piatti pubblicati in memoria condivisa dal
- * responsabile, sceglie in quale coda mettersi in base alla lunghezza
- * delle code, ritira primo/secondo, paga alla cassa (primo, secondo E
- * l'eventuale dolce-caffe' desiderato, tutto insieme) e consuma il pasto
- * a un tavolo; solo dopo aver mangiato passa alla stazione coffee a
- * ritirare il dolce/caffe' gia' pagato (Figura 1 del testo: la stazione
- * coffee segue la cassa, non la precede).
- *
- * Versione completa:
- *  - l'utente e' di tipo "con ticket" (TICKET_PERCENTAGE% dei casi) o
- *    "senza ticket": il primo ha diritto a uno sconto ma deve passare
- *    dalla fila per la lettura del ticket (NOF_TICKET_READERS lettori);
- *  - gli utenti sono raggruppati in gruppi da 1 a MAX_USERS_PER_GROUP
- *    membri, decisi dal responsabile alla creazione dei processi. I
- *    membri di un gruppo pranzano insieme: passano in cassa solo quando
- *    tutti si sono riforniti, tramite il capogruppo che raccoglie gli
- *    ordini e presenta un'unica richiesta di pagamento.
- * ====================================================================== */
-
-/* ======================================================================
- * Flag di controllo
- * ====================================================================== */
+/* Flag di controllo */
 
 static volatile sig_atomic_t giorno_finito      = 0; /* SIGUSR1 */
 static volatile sig_atomic_t simulazione_finita = 0; /* SIGTERM */
@@ -48,9 +23,7 @@ static void handler_fine_simulazione(int signo) { (void)signo; simulazione_finit
 
 static int devo_fermarmi(void) { return giorno_finito || simulazione_finita; }
 
-/* ======================================================================
- * Contesto del processo utente
- * ====================================================================== */
+/* Contesto del processo utente */
 
 typedef struct {
     const Config  *cfg;
@@ -70,11 +43,7 @@ typedef struct {
     int primi_esauriti, secondi_esauriti;
 } Ordine;
 
-/* ======================================================================
- * Contabilita' degli utenti in coda: serve al responsabile per decidere
- * la terminazione per overload (sez. 5.6). Chi e' ancora in coda quando
- * la mensa chiude rinuncia al pasto e viene conteggiato a parte.
- * ====================================================================== */
+/* Contabilita' degli utenti in coda */
 
 static void coda_entra(const Ctx *c) {
     sem_wait_idx(c->semid, SEM_MUTEX_ATTESA);
@@ -93,11 +62,7 @@ static double ms_trascorsi(const struct timespec *t0, const struct timespec *t1)
     return (t1->tv_sec - t0->tv_sec) * 1000.0 + (t1->tv_nsec - t0->tv_nsec) / 1e6;
 }
 
-/* ======================================================================
- * Fila per la lettura del ticket (sez. 6): solo gli utenti con ticket la
- * affrontano, ed e' modellata come un insieme di NOF_TICKET_READERS
- * lettori (semaforo contatore) su cui si attende passivamente.
- * ====================================================================== */
+/* Fila per la lettura del ticket */
 
 static int leggi_ticket(const Ctx *c) {
     if (!c->ha_ticket) return 1;
@@ -108,7 +73,7 @@ static int leggi_ticket(const Ctx *c) {
 
     if (sem_wait_idx_intr(c->semid, SEM_POSTAZIONI_TICKET) == -1) {
         coda_esci(c, 1);
-        return 0;   /* mensa chiusa mentre ero in fila: rinuncio */
+        return 0; 
     }
 
     sim_sleep_sec(c->cfg->n_nano_secs, sim_rand_intorno(c->cfg->avg_srvc_ticket, 20));
@@ -120,12 +85,7 @@ static int leggi_ticket(const Ctx *c) {
     return 1;
 }
 
-/* ======================================================================
- * Composizione del menu (sez. 5.5): il menu del giorno e' quello caricato
- * dal responsabile in memoria condivisa; l'utente ne estrae la propria
- * combinazione secondo le probabilita' di configurazione, garantendo
- * sempre almeno un primo o un secondo.
- * ====================================================================== */
+/* Composizione del menu */
 
 static void componi_menu(const Ctx *c, Ordine *o) {
     memset(o, 0, sizeof(*o));
@@ -140,10 +100,9 @@ static void componi_menu(const Ctx *c, Ordine *o) {
     o->vuole_primo   = (n_primi   > 0) && (sim_rand_range(0, 99) < c->cfg->prob_primo);
     o->vuole_secondo = (n_secondi > 0) && (sim_rand_range(0, 99) < c->cfg->prob_secondo_contorno);
 
-    /* il menu deve includere almeno un piatto principale */
     if (!o->vuole_primo && !o->vuole_secondo) {
         if (n_primi > 0 && (n_secondi == 0 || sim_rand_range(0, 1) == 0)) o->vuole_primo = 1;
-        else if (n_secondi > 0)                                          o->vuole_secondo = 1;
+        else if (n_secondi > 0) o->vuole_secondo = 1;
     }
 
     if (o->vuole_primo)   o->primo_idx   = sim_rand_range(0, n_primi - 1);
@@ -154,14 +113,10 @@ static void componi_menu(const Ctx *c, Ordine *o) {
     o->vuole_caffe = (n_caffe > 0) && (sim_rand_range(0, 99) < c->cfg->prob_caffe);
 
     if (o->vuole_dolce) o->dolce_idx  = sim_rand_range(0, n_dolci - 1);
-    /* almeno 4 tipi di caffe': normale, macchiato, decaffeinato, ginseng */
     if (o->vuole_caffe) o->tipo_caffe = sim_rand_range(0, n_caffe - 1);
 }
 
-/* ======================================================================
- * Visita a una stazione di distribuzione: invio della richiesta sulla
- * coda della stazione e attesa passiva della risposta dell'operatore.
- * ====================================================================== */
+/* Visita a una stazione di distribuzione:*/
 
 static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
     MsgRichiestaCibo req;
@@ -183,7 +138,7 @@ static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
             req.contorno_idx = o->contorno_idx;
             break;
         default:
-            req.tipo_piatto = TIPO_DOLCE;   /* visita alla stazione coffee */
+            req.tipo_piatto = TIPO_DOLCE;
             req.scelta_idx  = -1;
             req.dolce_idx   = o->vuole_dolce ? o->dolce_idx  : -1;
             req.tipo_caffe  = o->vuole_caffe ? o->tipo_caffe : -1;
@@ -205,7 +160,6 @@ static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
         if (msgrcv(c->mq[staz], &resp, sizeof(resp) - sizeof(long), (long)getpid(), 0) != -1)
             break;
         if (errno == EINTR && !devo_fermarmi()) continue;
-        /* la mensa ha chiuso mentre ero in coda: rinuncio (sez. 5.5) */
         coda_esci(c, 1);
         return 0;
     }
@@ -215,9 +169,6 @@ static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
     stats_record_attesa(c->stats, c->semid, staz, ms_trascorsi(&t0, &t1));
 
     if (staz == STAZIONE_COFFEE) {
-        /* con esito diverso da ESITO_OK la stazione ha chiuso prima di
-         * poter servire (drain di fine giornata dell'operatore): non si
-         * e' ottenuto ne' il dolce ne' il caffe' richiesti */
         if (resp.esito != ESITO_OK) return 0;
         o->ha_dolce = o->vuole_dolce;
         o->ha_caffe = o->vuole_caffe;
@@ -231,8 +182,6 @@ static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
         return 0;
     }
 
-    /* il piatto puo' essere stato sostituito con un altro dello stesso
-     * tipo perche' quello scelto era terminato (sez. 5.5) */
     if (staz == STAZIONE_PRIMI) {
         o->ha_primo  = 1;
         o->primo_idx = resp.piatto_idx;
@@ -244,11 +193,7 @@ static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
     return 1;
 }
 
-/* ======================================================================
- * Giro delle stazioni di distribuzione: fra le stazioni ancora da
- * visitare l'utente sceglie ogni volta quella con la coda piu' corta
- * (sez. 5.5), rivalutando la situazione dopo ogni piatto ottenuto.
- * ====================================================================== */
+/* Giro delle stazioni di distribuzione */
 
 static void giro_stazioni(const Ctx *c, Ordine *o) {
     TipoStazione da_visitare[2];
@@ -270,8 +215,7 @@ static void giro_stazioni(const Ctx *c, Ordine *o) {
         n--;
     }
 
-    /* se il tipo desiderato e' finito, ripiega sull'altro tipo di piatto
-     * principale (sez. 5.5: "mangera' solo secondo o solo primo") */
+    // se il tipo desiderato e' finito ripiega sull'altro tipo di piatto principale
     if (!devo_fermarmi() && !o->ha_primo && !o->ha_secondo) {
         if (o->primi_esauriti && !o->vuole_secondo && c->stato->secondi.num_piatti_oggi > 0) {
             o->vuole_secondo = 1;
@@ -285,22 +229,10 @@ static void giro_stazioni(const Ctx *c, Ordine *o) {
             visita_stazione(c, STAZIONE_PRIMI, o);
         }
     }
-
-    /* dolce e caffe' NON si ritirano qui: si pagano insieme al resto ma si
-     * ritirano solo dopo aver mangiato primo/secondo (vedi prendi_dolce_caffe) */
 }
 
-/* ======================================================================
- * Pagamento (sez. 5.5 / 5.4). Un utente singolo e' il capogruppo di un
- * gruppo di un solo membro: la logica e' quindi unica.
- * ====================================================================== */
+/* Pagamento */
 
-/* Il dolce e il caffe' si pagano in base al DESIDERIO espresso a menu
- * (o->vuole_dolce/vuole_caffe), non al ritiro effettivo: il ritiro alla
- * stazione coffee avviene solo dopo, a pasto principale concluso (vedi
- * prendi_dolce_caffe). Se la stazione risultasse chiusa nel frattempo
- * (drain di fine giornata), l'utente avrebbe pagato senza ottenerlo: caso
- * limite raro, stesso tipo di race gia' nota per la cassa a fine giornata. */
 static void ordine_in_messaggio(const Ordine *o, int ha_ticket, MsgOrdineGruppo *m) {
     m->partecipa    = (o->ha_primo || o->ha_secondo);
     m->ha_ticket    = ha_ticket;
@@ -315,8 +247,7 @@ static void ordine_in_messaggio(const Ordine *o, int ha_ticket, MsgOrdineGruppo 
     m->tipo_caffe   = o->tipo_caffe;
 }
 
-static void aggiungi_a_richiesta(MsgRichiestaCassa *req, int i, pid_t pid, int ha_ticket,
-                                 const MsgOrdineGruppo *m) {
+static void aggiungi_a_richiesta(MsgRichiestaCassa *req, int i, pid_t pid, int ha_ticket, const MsgOrdineGruppo *m) {
     req->membri_pid[i]  = pid;
     req->ha_ticket[i]   = ha_ticket;
     req->ha_primo[i]    = m->ha_primo;
@@ -330,10 +261,7 @@ static void aggiungi_a_richiesta(MsgRichiestaCassa *req, int i, pid_t pid, int h
     req->tipo_caffe[i]  = m->tipo_caffe;
 }
 
-/* Attende la propria ricevuta dalla cassa. Ritorna 1 se il pagamento e'
- * andato a buon fine. Come per le altre code, alla chiusura della mensa
- * l'attesa viene abbandonata: cosi' nessun utente puo' restare bloccato
- * oltre la fine della giornata. */
+/* Attende la propria ricevuta dalla cassa. Ritorna 1 se il pagamento e' andato a buon fine. */
 static int attendi_ricevuta(const Ctx *c) {
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -341,8 +269,7 @@ static int attendi_ricevuta(const Ctx *c) {
 
     MsgRispostaCassa resp;
     for (;;) {
-        if (msgrcv(c->mq[STAZIONE_CASSA], &resp, sizeof(resp) - sizeof(long),
-                   (long)getpid(), 0) != -1)
+        if (msgrcv(c->mq[STAZIONE_CASSA], &resp, sizeof(resp) - sizeof(long), (long)getpid(), 0) != -1)
             break;
         if (errno == EINTR && !devo_fermarmi()) continue;
         coda_esci(c, 1);
@@ -352,13 +279,11 @@ static int attendi_ricevuta(const Ctx *c) {
     coda_esci(c, 0);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     stats_record_attesa(c->stats, c->semid, STAZIONE_CASSA, ms_trascorsi(&t0, &t1));
-    /* totale_pagato == -1: la cassa ha chiuso prima di poter incassare
-     * questa richiesta (drain di fine giornata), pagamento non riuscito */
+
     return (resp.totale_pagato >= 0);
 }
 
-/* Membro non capogruppo: comunica il proprio ordine al capogruppo e, se
- * partecipa al pranzo, attende la ricevuta dalla cassa. */
+/* Membro non capogruppo: comunica il proprio ordine al capogruppo e, se partecipa al pranzo, attende la ricevuta dalla cassa. */
 static int paga_come_membro(const Ctx *c, const Ordine *o, pid_t capo_pid) {
     MsgOrdineGruppo m;
     memset(&m, 0, sizeof(m));
@@ -366,8 +291,6 @@ static int paga_come_membro(const Ctx *c, const Ordine *o, pid_t capo_pid) {
     m.membro_pid = getpid();
     ordine_in_messaggio(o, c->ha_ticket, &m);
 
-    /* il messaggio viene inviato SEMPRE, anche quando non si partecipa:
-     * cosi' il capogruppo sa esattamente quanti ordini attendere */
     while (msgsnd(c->mq_gruppo, &m, sizeof(m) - sizeof(long), 0) == -1) {
         if (errno == EINTR && !devo_fermarmi()) continue;
         return 0;
@@ -379,8 +302,6 @@ static int paga_come_membro(const Ctx *c, const Ordine *o, pid_t capo_pid) {
     return attendi_ricevuta(c);
 }
 
-/* Capogruppo: raccoglie gli ordini degli altri membri, costruisce l'unica
- * richiesta di pagamento del gruppo e attende la propria ricevuta. */
 static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
     MsgRichiestaCassa req;
     memset(&req, 0, sizeof(req));
@@ -396,19 +317,17 @@ static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
     if (io_partecipo)
         aggiungi_a_richiesta(&req, partecipanti++, getpid(), c->ha_ticket, &mio);
 
-    /* ogni membro invia esattamente un ordine al giorno: la raccolta
-     * termina sempre, anche se qualcuno ha rinunciato al pasto */
     for (int raccolti = 0; raccolti < num_membri - 1; raccolti++) {
         MsgOrdineGruppo m;
         while (msgrcv(c->mq_gruppo, &m, sizeof(m) - sizeof(long), (long)getpid(), 0) == -1) {
             if (errno == EINTR && !devo_fermarmi()) continue;
-            return 0;   /* mensa chiusa: si abbandona la raccolta */
+            return 0;
         }
         if (m.partecipa && partecipanti < MAX_GRUPPO)
             aggiungi_a_richiesta(&req, partecipanti++, m.membro_pid, m.ha_ticket, &m);
     }
 
-    if (partecipanti == 0) return 0;   /* nessuno del gruppo pranza oggi */
+    if (partecipanti == 0) return 0;  
     req.num_membri = partecipanti;
 
     struct timespec t0, t1;
@@ -422,15 +341,13 @@ static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
     }
 
     if (!io_partecipo) {
-        /* ho pagato per il gruppo pur non pranzando: non attendo ricevuta */
         coda_esci(c, 0);
         return 0;
     }
 
     MsgRispostaCassa resp;
     for (;;) {
-        if (msgrcv(c->mq[STAZIONE_CASSA], &resp, sizeof(resp) - sizeof(long),
-                   (long)getpid(), 0) != -1)
+        if (msgrcv(c->mq[STAZIONE_CASSA], &resp, sizeof(resp) - sizeof(long), (long)getpid(), 0) != -1)
             break;
         if (errno == EINTR && !devo_fermarmi()) continue;
         coda_esci(c, 1);
@@ -443,14 +360,7 @@ static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
     return (resp.totale_pagato >= 0);
 }
 
-/* ======================================================================
- * Consumo del pasto principale (primo/secondo): serve un posto libero fra
- * gli NOF_TABLE_SEATS complessivi, altrimenti si attende che se ne liberi
- * uno (sez. 5.5). Il tempo di consumo e' proporzionale al numero di
- * piatti. Il dolce/caffe' (gia' pagato) si ritira dopo, vedi
- * prendi_dolce_caffe(): la Figura 1 del testo mostra la stazione coffee
- * dopo la cassa e i tavoli, non prima.
- * ====================================================================== */
+/* Consumo dei pasti */
 
 static void consuma_pasto(const Ctx *c, const Ordine *o) {
     int num_piatti = o->ha_primo + o->ha_secondo;
@@ -468,11 +378,6 @@ static void consuma_pasto(const Ctx *c, const Ordine *o) {
     sem_signal_idx(c->semid, SEM_TAVOLI);
 }
 
-/* Dolce e caffe' si ritirano alla stazione coffee dopo aver mangiato
- * primo/secondo: sono gia' stati pagati insieme al resto (vedi
- * ordine_in_messaggio). Consumati "al banco", senza rioccupare un
- * tavolo: evita di dover modellare un secondo ciclo di attesa/rilascio
- * su SEM_TAVOLI per un'aggiunta di consumo marginale. */
 static void prendi_dolce_caffe(const Ctx *c, Ordine *o) {
     if (devo_fermarmi() || !(o->vuole_dolce || o->vuole_caffe)) return;
 
@@ -483,22 +388,18 @@ static void prendi_dolce_caffe(const Ctx *c, Ordine *o) {
     }
 }
 
-/* ======================================================================
- * Una giornata dell'utente
- * ====================================================================== */
+/* Una giornata dell'utente*/
 
 static void giornata(const Ctx *c, int capogruppo, int num_membri, pid_t capo_pid) {
     Ordine o;
     memset(&o, 0, sizeof(o));
     o.primo_idx = o.secondo_idx = o.contorno_idx = o.dolce_idx = o.tipo_caffe = -1;
 
-    /* sez. 5.5: ogni giorno l'utente decide se recarsi in mensa */
-    int vado_in_mensa = !devo_fermarmi() &&
-                        sim_rand_range(0, 99) < c->cfg->prob_vado_in_mensa;
+    int vado_in_mensa = !devo_fermarmi() && sim_rand_range(0, 99) < c->cfg->prob_vado_in_mensa;
 
     if (vado_in_mensa && leggi_ticket(c)) {
         componi_menu(c, &o);
-        giro_stazioni(c, &o);   /* solo primo/secondo: dolce/caffe' dopo, vedi sotto */
+        giro_stazioni(c, &o);
     }
 
     int ha_pagato = 0;
@@ -509,24 +410,19 @@ static void giornata(const Ctx *c, int capogruppo, int num_membri, pid_t capo_pi
 
     if (ha_pagato) {
         consuma_pasto(c, &o);
-        prendi_dolce_caffe(c, &o);   /* dolce/caffe' gia' pagati: si ritirano ora */
+        prendi_dolce_caffe(c, &o); 
         stats_record_utente_ha_mangiato(c->stats, c->semid);
         stats_record_utente_servito(c->stats, c->semid);
     } else if (vado_in_mensa) {
-        /* si e' recato in mensa ma non ha potuto pranzare: piatti esauriti
-         * oppure mensa chiusa mentre era ancora in coda (sez. 5.5/5.6) */
         stats_record_utente_non_servito(c->stats, c->semid);
     }
 }
 
-/* ======================================================================
- * MAIN
- * ====================================================================== */
+/* MAIN */
 
 int main(int argc, char *argv[]) {
     if (argc < 5) {
-        fprintf(stderr, "uso: %s <config_path> <capogruppo 0|1> <num_membri> <pid_capogruppo>\n",
-                argv[0]);
+        fprintf(stderr, "uso: %s <config_path> <capogruppo 0|1> <num_membri> <pid_capogruppo>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -545,7 +441,7 @@ int main(int argc, char *argv[]) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handler_fine_giorno;
-    sa.sa_flags = 0;   /* NIENTE SA_RESTART: le attese devono interrompersi */
+    sa.sa_flags = 0;  
     sigaction(SIGUSR1, &sa, NULL);
 
     memset(&sa, 0, sizeof(sa));
@@ -566,18 +462,13 @@ int main(int argc, char *argv[]) {
     c.mq[STAZIONE_CASSA]   = msgq_cassa_get(0);
     c.mq_gruppo            = msgq_gruppo_get(0);
 
-    /* sez. 6: l'80% degli utenti (TICKET_PERCENTAGE) e' di tipo
-     * "utente w ticket"; il tipo e' una caratteristica del processo e non
-     * cambia da un giorno all'altro */
     c.ha_ticket = sim_rand_range(0, 99) < cfg.ticket_percentage;
 
-    /* maschera usata per attendere senza corse la fine della giornata */
     sigset_t mask_fine, mask_orig;
     sigemptyset(&mask_fine);
     sigaddset(&mask_fine, SIGUSR1);
     sigaddset(&mask_fine, SIGTERM);
 
-    /* fine inizializzazione */
     sem_signal_idx(c.semid, SEM_BARRIERA_READY);
 
     while (!simulazione_finita) {
@@ -588,9 +479,6 @@ int main(int argc, char *argv[]) {
 
         giornata(&c, capogruppo, num_membri, capo_pid);
 
-        /* barriera di fine giornata: si segnala al responsabile di aver
-         * concluso e si attende (passivamente, senza corse fra il test dei
-         * flag e la sospensione) il SIGUSR1 che chiude la giornata */
         sigprocmask(SIG_BLOCK, &mask_fine, &mask_orig);
         sem_signal_idx(c.semid, SEM_BARRIERA_READY);
         while (!giorno_finito && !simulazione_finita)

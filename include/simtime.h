@@ -1,23 +1,9 @@
 #ifndef SIMTIME_H
 #define SIMTIME_H
 
-/* ======================================================================
- * Tempo simulato e generazione di valori casuali.
- *
- * Convenzione unica per tutto il progetto (sez. 5.1): un minuto di
- * simulazione corrisponde a N_NANO_SECS nanosecondi reali, quindi un
- * secondo simulato corrisponde a N_NANO_SECS/60 nanosecondi reali.
- * Tutti i processi (responsabile, operatori, cassieri, utenti,
- * communication_disorder) usano queste funzioni: cosi' i tempi restano
- * confrontabili fra loro e con la durata della giornata.
- * ====================================================================== */
-
 /**
  * @brief Inizializza il generatore pseudo-casuale del processo chiamante
  *        con un seme dipendente da pid e ora corrente.
- *
- * Va chiamata una sola volta subito dopo la exec, altrimenti processi
- * creati nello stesso istante genererebbero le stesse sequenze.
  */
 void sim_srand(void);
 
@@ -51,11 +37,7 @@ long sim_minuti_in_ns(long n_nano_secs, int minuti);
 /**
  * @brief Sospende il processo per il numero indicato di secondi simulati,
  *        riprendendo il sonno residuo se interrotto da un segnale.
- *
- * Da usare quando l'operazione in corso non puo' essere abbandonata a
- * meta' (sez. 5.3: l'operatore "termina di servire il cliente che stava
- * servendo" anche se nel frattempo la giornata e' finita).
- *
+ * 
  * @param n_nano_secs      Nanosecondi reali per minuto simulato.
  * @param secondi_simulati Durata in secondi simulati.
  */

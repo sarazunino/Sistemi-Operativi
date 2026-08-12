@@ -21,18 +21,8 @@ static int n_figli = 0;
 
 extern char **environ;
 
-/* ======================================================================
- * Caricamento menu (config/menu.txt, sintassi "TIPO;Nome")
- * ====================================================================== */
+/* Caricamento menu */
 
-/* Il file menu.txt non contiene i prezzi: sono fissati dalla
- * configurazione (PRICE_PRIMI, PRICE_SECONDI, PRICE_DOLCE, PRICE_COFFEE)
- * e sono uguali per tutti i piatti dello stesso tipo (sez. 5.4). Ai
- * contorni non e' associato un prezzo proprio: sono compresi nel prezzo
- * del secondo. Nessun abbinamento fisso secondo->contorno: la lista dei
- * contorni disponibili viene pubblicata in memoria condivisa e sara'
- * l'utente a scegliere quale abbinare, indicandolo nel campo
- * contorno_idx della propria richiesta (vedi common.h). */
 static void carica_menu(const char *path, const Config *cfg, StatoStazioni *stato) {
     FILE *f = fopen(path, "r");
     if (!f) {
@@ -75,7 +65,7 @@ static void carica_menu(const char *path, const Config *cfg, StatoStazioni *stat
             int i = secondi->num_contorni++;
             strncpy(secondi->contorni[i].nome, nome, MAX_NOME_PIATTO - 1);
             secondi->contorni[i].nome[MAX_NOME_PIATTO - 1] = '\0';
-            secondi->contorni[i].prezzo = 0;   /* incluso nel prezzo del secondo */
+            secondi->contorni[i].prezzo = 0;   
         } else if (strcmp(tipo_str, "DOLCE") == 0) {
             if (coffee->num_dolci >= MAX_DOLCI) continue;
             int i = coffee->num_dolci++;
@@ -92,7 +82,6 @@ static void carica_menu(const char *path, const Config *cfg, StatoStazioni *stat
     }
     fclose(f);
 
-    /* sez. 5: almeno 2 primi, 2 secondi con relativi contorni e 4 tipi di caffe' */
     if (primi->num_piatti_oggi < 2 || secondi->num_piatti_oggi < 2) {
         fprintf(stderr, "responsabile: il menu deve contenere almeno 2 primi e 2 secondi\n");
         exit(EXIT_FAILURE);
@@ -115,20 +104,11 @@ static void carica_menu(const char *path, const Config *cfg, StatoStazioni *stat
            coffee->num_dolci, coffee->num_caffe);
 }
 
-/* ======================================================================
- * Assegnazione operatori alle stazioni (sez. 5.2)
- * ====================================================================== */
+/* Assegnazione operatori alle stazioni */
 
-/* Almeno un operatore per stazione, poi i restanti vengono assegnati
- * privilegiando le stazioni con il tempo medio di servizio piu' alto.
- * Dopo ogni assegnazione il tempo della stazione scelta viene diviso per
- * il numero di operatori che vi lavorano: si ottiene cosi' il tempo medio
- * "per operatore", che e' il criterio con cui si continua a distribuire i
- * lavoratori rimanenti. */
 static void assegna_operatori(const Config *cfg, TipoStazione *assegnazione, int nof_workers) {
-    const TipoStazione base[NUM_STAZIONI] = {
-        STAZIONE_PRIMI, STAZIONE_SECONDI, STAZIONE_COFFEE, STAZIONE_CASSA
-    };
+    const TipoStazione base[NUM_STAZIONI] = {STAZIONE_PRIMI, STAZIONE_SECONDI, STAZIONE_COFFEE, STAZIONE_CASSA};
+
     const int tempi[NUM_STAZIONI] = {
         cfg->avg_srvc_primi, cfg->avg_srvc_main_course,
         cfg->avg_srvc_coffee, cfg->avg_srvc_cassa
@@ -136,8 +116,6 @@ static void assegna_operatori(const Config *cfg, TipoStazione *assegnazione, int
     int addetti[NUM_STAZIONI];
     int idx = 0;
 
-    /* il main garantisce nof_workers >= NUM_STAZIONI, quindi ogni stazione
-     * riceve sicuramente il proprio operatore (sez. 5.2) */
     for (int i = 0; i < NUM_STAZIONI; i++) {
         assegnazione[idx++] = base[i];
         addetti[i] = 1;
@@ -153,12 +131,7 @@ static void assegna_operatori(const Config *cfg, TipoStazione *assegnazione, int
     }
 }
 
-/* Avvia un processo operatore: un unico eseguibile in grado di servire
- * una qualsiasi delle 4 stazioni (compresa la cassa), decisa giorno per
- * giorno dal responsabile e comunicata via memoria condivisa (sez. 5.2),
- * non piu' fissata all'avvio. L'id univoco serve sia a indicizzare
- * stato->stazione_operatore_oggi[] sia per il conteggio degli "operatori
- * attivi" nelle statistiche. */
+/* Avvia un processo operatore  */
 static void avvia_worker(int id, const char *config_path) {
     pid_t pid = fork();
     if (pid < 0) { perror("fork operatore"); exit(EXIT_FAILURE); }
@@ -175,9 +148,7 @@ static void avvia_worker(int id, const char *config_path) {
     figli_pid[n_figli++] = pid;
 }
 
-/* ======================================================================
- * Creazione utenti, organizzati in gruppi (sez. 6)
- * ====================================================================== */
+/* Creazione utenti, organizzati in gruppi */
 
 static pid_t avvia_utente(const char *config_path, int capogruppo, int num_membri, pid_t capo_pid) {
     pid_t pid = fork();
@@ -189,8 +160,7 @@ static pid_t avvia_utente(const char *config_path, int capogruppo, int num_membr
         snprintf(s_num,  sizeof(s_num),  "%d", num_membri);
         snprintf(s_pid,  sizeof(s_pid),  "%d", (int)capo_pid);
 
-        char *args[] = { (char *)"./bin/utente", (char *)config_path,
-                         s_capo, s_num, s_pid, NULL };
+        char *args[] = { (char *)"./bin/utente", (char *)config_path, s_capo, s_num, s_pid, NULL };
         execve("./bin/utente", args, environ);
         perror("execve utente");
         _exit(EXIT_FAILURE);
@@ -199,10 +169,7 @@ static pid_t avvia_utente(const char *config_path, int capogruppo, int num_membr
     return pid;
 }
 
-/* Forma i gruppi e crea tutti gli NOF_USERS processi utente. La
- * dimensione di ciascun gruppo e' estratta casualmente in
- * 1..MAX_USERS_PER_GROUP e l'associazione utenti<->gruppo e' quindi
- * determinata al momento della creazione dei processi (sez. 6). */
+/* Forma i gruppi e crea tutti gli NOF_USERS processi utente. */
 static void crea_utenti_a_gruppi(const Config *cfg, const char *config_path) {
     if (cfg->max_users_per_group > MAX_GRUPPO) {
         fprintf(stderr, "responsabile: MAX_USERS_PER_GROUP (%d) supera il limite statico MAX_GRUPPO (%d)\n",
@@ -231,21 +198,12 @@ static void crea_utenti_a_gruppi(const Config *cfg, const char *config_path) {
     printf("[RESPONSABILE] Creati %d utenti organizzati in %d gruppi.\n", cfg->nof_users, gruppi);
 }
 
-/* ======================================================================
- * Aggiunta dinamica di utenti (versione completa, sez. 6): ./bin/add_users
- * non crea processi direttamente, si limita a mandare una richiesta su
- * mq_addusers (vedi common.h per la motivazione). E' il responsabile a
- * fare fork/exec dei nuovi utenti, cosi' che nascano nel proprio process
- * group (ereditato automaticamente dal padre) e siano regolarmente
- * raggiungibili da killpg()/waitpid() come quelli creati all'avvio.
- * ====================================================================== */
+/* Aggiunta dinamica di utenti: ./bin/add_users*/
 
-static void gestisci_richieste_add_users(const char *config_path,
-                                          int semid, StatoStazioni *stato, int mq_addusers) {
+static void gestisci_richieste_add_users(const char *config_path, int semid, StatoStazioni *stato, int mq_addusers) {
     MsgRichiestaAddUsers req;
 
-    while (msgrcv(mq_addusers, &req, sizeof(req) - sizeof(long),
-                  MSG_ADDUSERS_RICHIESTA, IPC_NOWAIT) != -1) {
+    while (msgrcv(mq_addusers, &req, sizeof(req) - sizeof(long), MSG_ADDUSERS_RICHIESTA, IPC_NOWAIT) != -1) {
 
         int n = req.n_utenti;
         if (n <= 0) continue;
@@ -257,20 +215,17 @@ static void gestisci_richieste_add_users(const char *config_path,
         }
 
         for (int i = 0; i < n; i++)
-            avvia_utente(config_path, 1, 1, 0);   /* ciascuno capogruppo di se stesso */
+            avvia_utente(config_path, 1, 1, 0);  
 
         sem_wait_idx(semid, SEM_MUTEX_ATTESA);
         stato->nof_children_totali += n;
         sem_signal_idx(semid, SEM_MUTEX_ATTESA);
 
-        printf("[RESPONSABILE] Aggiunti %d nuovi utenti su richiesta di add_users (totale processi: %d).\n",
-               n, n_figli);
+        printf("[RESPONSABILE] Aggiunti %d nuovi utenti su richiesta di add_users (totale processi: %d).\n", n, n_figli);
     }
 }
 
-/* ======================================================================
- * Barriere di sincronizzazione (inizializzazione e fine giornata)
- * ====================================================================== */
+/* Barriere di sincronizzazione (inizializzazione e fine giornata) */
 
 static int leggi_n_children(int semid, StatoStazioni *stato) {
     sem_wait_idx(semid, SEM_MUTEX_ATTESA);
@@ -287,14 +242,9 @@ static void rilascia_gate(int semid, int n) {
     for (int i = 0; i < n; i++) sem_signal_idx(semid, SEM_GATE_START);
 }
 
-/* ======================================================================
- * Rifornimento delle stazioni primi e secondi (sez. 5.2 / sez. 6)
- * ====================================================================== */
+/* Rifornimento delle stazioni primi e secondi */
 
-/* Le stazioni vengono rifornite ogni AVG_REFILL_TIME secondi simulati
- * +-REFILL_VARIABILITY_PERCENT%, fino al massimo di MAX_PORZIONI_*. */
-static void refill_se_necessario(int semid, TipoStazione tipo, StatoStazioni *stato,
-                                 int quantita_refill, int minuti_trascorsi,
+static void refill_se_necessario(int semid, TipoStazione tipo, StatoStazioni *stato, int quantita_refill, int minuti_trascorsi,
                                  int *minuti_al_prossimo_refill, const Config *cfg) {
     *minuti_al_prossimo_refill -= minuti_trascorsi;
     if (*minuti_al_prossimo_refill > 0) return;
@@ -327,8 +277,7 @@ static void refill_se_necessario(int semid, TipoStazione tipo, StatoStazioni *st
     *minuti_al_prossimo_refill = sim_rand_intorno(minuti_refill, cfg->refill_variability_percent);
 }
 
-/* Conteggio delle porzioni rimaste invendute a fine giornata (sez. 5.1:
- * "il numero di piatti avanzati totali e per tipo"). */
+/* Conteggio delle porzioni rimaste invendute a fine giornata */
 static void registra_piatti_avanzati(Statistiche *stats, int semid, StatoStazioni *stato) {
     int avanzati_primi = 0, avanzati_secondi = 0;
 
@@ -339,12 +288,9 @@ static void registra_piatti_avanzati(Statistiche *stats, int semid, StatoStazion
 
     stats_record_piatto_avanzato(stats, semid, TIPO_PRIMO, avanzati_primi);
     stats_record_piatto_avanzato(stats, semid, TIPO_SECONDO, avanzati_secondi);
-    /* dolci e caffe' hanno quantita' illimitata (sez. 5.2): non avanzano */
 }
 
-/* ======================================================================
- * MAIN
- * ====================================================================== */
+/* MAIN */
 
 int main(int argc, char *argv[]) {
     const char *config_path = (argc > 1) ? argv[1] : CONFIG_PATH_DEFAULT;
@@ -369,11 +315,8 @@ int main(int argc, char *argv[]) {
 
     sim_srand();
 
-    /* Il responsabile diventa leader del proprio process group: add_users
-     * puo' cosi' agganciare i nuovi utenti allo stesso gruppo e un solo
-     * killpg raggiunge tutti i discendenti. */
     setpgid(0, 0);
-    signal(SIGUSR1, SIG_IGN);   /* il segnale di fine giornata e' per i figli */
+    signal(SIGUSR1, SIG_IGN);  
 
     FILE *pf = fopen("output/responsabile.pid", "w");
     if (pf) { fprintf(pf, "%d\n", (int)getpid()); fclose(pf); }
@@ -391,8 +334,7 @@ int main(int argc, char *argv[]) {
     int mq_gruppo    = msgq_gruppo_get(1);
     int mq_addusers  = msgq_addusers_get(1);
 
-    ipc_track_for_cleanup(shm_st_id, shm_stats_id, semid,
-                          mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo, mq_addusers);
+    ipc_track_for_cleanup(shm_st_id, shm_stats_id, semid, mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo, mq_addusers);
 
     StatoStazioni *stato = shm_stazioni_attach(shm_st_id);
     shm_stazioni_init(stato);
@@ -406,10 +348,6 @@ int main(int argc, char *argv[]) {
     stato->postazioni_totali[STAZIONE_COFFEE]  = cfg.nof_wk_seats_coffee;
     stato->postazioni_totali[STAZIONE_CASSA]   = cfg.nof_wk_seats_cassa;
 
-    /* postazioni_libere e' il "gemello" contabile dei semafori
-     * SEM_POSTAZIONI_*: gli operatori lo aggiornano a ogni acquisizione e
-     * rilascio e lo usano per verificare che la stazione non resti mai
-     * sguarnita quando qualcuno chiede una pausa (sez. 5.3). */
     for (int i = 0; i < NUM_STAZIONI; i++)
         stato->postazioni_libere[i] = stato->postazioni_totali[i];
 
@@ -426,9 +364,6 @@ int main(int argc, char *argv[]) {
     };
     sem_set_init(semid, &seats);
 
-    /* Avvio degli operatori (sez. 5.1): la stazione di ciascuno per la
-     * prima giornata viene decisa e pubblicata piu' sotto, all'inizio del
-     * ciclo dei giorni, insieme a quella di tutti i giorni successivi. */
     for (int i = 0; i < cfg.nof_workers; i++)
         avvia_worker(i, config_path);
 
@@ -436,12 +371,9 @@ int main(int argc, char *argv[]) {
 
     stato->nof_children_totali = n_figli;
 
-    /* sez. 5.1: la simulazione comincia solo quando tutti i processi sono
-     * stati creati e hanno terminato la fase di inizializzazione */
     printf("[RESPONSABILE] Attendo l'inizializzazione di %d processi...\n", n_figli);
     attendi_barriera(semid, n_figli);
-    printf("[RESPONSABILE] Simulazione avviata (%d giorni da %d minuti simulati).\n",
-           cfg.sim_duration, cfg.day_duration);
+    printf("[RESPONSABILE] Simulazione avviata (%d giorni da %d minuti simulati).\n", cfg.sim_duration, cfg.day_duration);
 
     char csv_path[512];
     snprintf(csv_path, sizeof(csv_path), "%sstatistiche_simulazione.csv", cfg.csv_output_dir);
@@ -455,12 +387,6 @@ int main(int argc, char *argv[]) {
         stato->utenti_in_attesa = 0;
         stato->utenti_in_coda_fine_giornata = 0;
 
-        /* Riassegnazione operatore-stazione (sez. 5.2): va applicata
-         * "all'inizio di ogni giorno", quindi ricalcolata qui e non solo
-         * all'avvio. La scrittura avviene PRIMA di rilascia_gate() piu'
-         * sotto: la signal sui semafori di SEM_GATE_START fa da barriera
-         * di memoria, garantendo che ogni operatore veda l'assegnazione
-         * odierna non appena si risveglia dal cancello. */
         TipoStazione assegnazione[NOF_WORKERS_MAX];
         assegna_operatori(&cfg, assegnazione, cfg.nof_workers);
         for (int i = 0; i < NUM_STAZIONI; i++) stato->operatori_assegnati[i] = 0;
@@ -472,8 +398,6 @@ int main(int argc, char *argv[]) {
                stato->operatori_assegnati[STAZIONE_PRIMI], stato->operatori_assegnati[STAZIONE_SECONDI],
                stato->operatori_assegnati[STAZIONE_COFFEE], stato->operatori_assegnati[STAZIONE_CASSA]);
 
-        /* le stazioni primi e secondi vengono inizializzate all'inizio di
-         * ogni giornata con AVG_REFILL_* porzioni per tipo di piatto */
         for (int i = 0; i < stato->primi.num_piatti_oggi; i++)
             stato->primi.porzioni_disponibili[i] = cfg.avg_refill_primi;
         for (int i = 0; i < stato->secondi.num_piatti_oggi; i++)
@@ -489,8 +413,6 @@ int main(int argc, char *argv[]) {
         int n_oggi = leggi_n_children(semid, stato);
         rilascia_gate(semid, n_oggi);
 
-        /* scorrere della giornata: il tempo avanza a blocchi di 10 minuti
-         * simulati, al termine dei quali si valuta il rifornimento */
         int minuti = 0;
         while (minuti < cfg.day_duration) {
             int intervallo = 10;
@@ -503,25 +425,16 @@ int main(int argc, char *argv[]) {
             nanosleep(&ts, NULL);
             minuti += intervallo;
 
-            refill_se_necessario(semid, STAZIONE_PRIMI, stato, cfg.avg_refill_primi,
-                                 intervallo, &minuti_refill_primi, &cfg);
-            refill_se_necessario(semid, STAZIONE_SECONDI, stato, cfg.avg_refill_secondi,
-                                 intervallo, &minuti_refill_secondi, &cfg);
+            refill_se_necessario(semid, STAZIONE_PRIMI, stato, cfg.avg_refill_primi, intervallo, &minuti_refill_primi, &cfg);
+            refill_se_necessario(semid, STAZIONE_SECONDI, stato, cfg.avg_refill_secondi, intervallo, &minuti_refill_secondi, &cfg);
 
-            /* eventuali richieste di ./bin/add_users arrivate nel frattempo
-             * (versione completa, sez. 6): i nuovi utenti entrano a far
-             * parte della simulazione dal giorno successivo */
             gestisci_richieste_add_users(config_path, semid, stato, mq_addusers);
         }
 
-        /* chiusura della mensa: tutti i figli vengono avvisati e si attende
-         * che ciascuno di essi raggiunga la barriera di fine giornata */
         int n_fine = leggi_n_children(semid, stato);
         killpg(0, SIGUSR1);
         attendi_barriera(semid, n_fine);
 
-        /* da qui nessun figlio sta lavorando: si possono leggere lo stato
-         * delle stazioni e ripulire le code senza interferenze */
         registra_piatti_avanzati(stats, semid, stato);
         msgq_svuota(mq_primi);
         msgq_svuota(mq_secondi);
@@ -545,12 +458,9 @@ int main(int argc, char *argv[]) {
     }
 
     stats->motivo_terminazione = causa_overload ? TERMINAZIONE_OVERLOAD : TERMINAZIONE_TIMEOUT;
-    printf("\n[RESPONSABILE] Terminazione della simulazione per: %s\n",
-           causa_overload ? "OVERLOAD" : "TIMEOUT");
+    printf("\n[RESPONSABILE] Terminazione della simulazione per: %s\n", causa_overload ? "OVERLOAD" : "TIMEOUT");
 
-    /* Fine simulazione: si avvisano i figli e si sbloccano quelli fermi al
-     * cancello di inizio giornata. */
-    signal(SIGTERM, SIG_IGN);   /* non autoterminarsi con il prossimo killpg */
+    signal(SIGTERM, SIG_IGN); 
     int n_finali = leggi_n_children(semid, stato);
     killpg(0, SIGTERM);
     rilascia_gate(semid, n_finali);

@@ -12,25 +12,8 @@
 #include <errno.h>
 #include <sys/msg.h>
 
-/* ======================================================================
- * Processo operatore (sez. 5.3) / operatore cassa (sez. 5.4).
- *
- * Un unico eseguibile serve indifferentemente una qualsiasi delle 4
- * stazioni (primi, secondi, coffee, cassa): la stazione da servire NON e'
- * fissata all'avvio, ma decisa dal responsabile ogni mattina e comunicata
- * via memoria condivisa (stato->stazione_operatore_oggi[id]), cosi' da
- * poter applicare "all'inizio di ogni giorno" (sez. 5.2) la politica di
- * associazione operatore-servizio, anche per la cassa.
- *
- * Ogni giornata l'operatore compete per una postazione della stazione
- * assegnatagli quel giorno, serve le richieste che arrivano sulla coda
- * di messaggi corrispondente e puo' concedersi fino a NOF_PAUSE pause,
- * mai lasciando la stazione senza presidio.
- * ====================================================================== */
 
-/* ======================================================================
- * Flag di controllo (impostati dai signal handler)
- * ====================================================================== */
+/* Flag di controllo  */
 
 static volatile sig_atomic_t giorno_finito      = 0; /* SIGUSR1: fine giornata */
 static volatile sig_atomic_t simulazione_finita = 0; /* SIGTERM: fine simulazione */
@@ -40,11 +23,7 @@ static void handler_fine_simulazione(int signo) { (void)signo; simulazione_finit
 
 static int devo_fermarmi(void) { return giorno_finito || simulazione_finita; }
 
-/* ======================================================================
- * Code di messaggi delle 4 stazioni, aperte tutte all'avvio: quale sia
- * effettivamente usata lo si scopre solo al mattino, leggendo la
- * stazione assegnata per la giornata.
- * ====================================================================== */
+/* Code di messaggi delle 4 stazioni */
 
 typedef struct {
     int primi;
@@ -62,13 +41,7 @@ static int mq_di(const CodeStazioni *code, TipoStazione tipo) {
     }
 }
 
-/* ======================================================================
- * Acquisizione / rilascio di una postazione (sez. 5.3): l'operatore
- * compete con gli altri per il posto assegnato dal responsabile e, se non
- * lo trova libero, resta in attesa passiva sul semaforo. L'attesa e'
- * interrompibile: a fine giornata anche chi non ha mai ottenuto una
- * postazione deve poter raggiungere la barriera del responsabile.
- * ====================================================================== */
+/* Acquisizione / rilascio di una postazione */
 
 static int acquisisci_postazione(int semid, StatoStazioni *stato, TipoStazione tipo) {
     if (sem_wait_idx_intr(semid, sem_postazioni_di(tipo)) == -1)
@@ -89,11 +62,7 @@ static void rilascia_postazione(int semid, StatoStazioni *stato, TipoStazione ti
     sem_signal_idx(semid, sem_postazioni_di(tipo));
 }
 
-/* ======================================================================
- * Gestione pause (sez. 5.3): non e' consentito lasciare una stazione
- * senza operatori, quindi la pausa e' concessa solo se, tra le postazioni
- * della stazione, ne resta occupata almeno un'altra.
- * ====================================================================== */
+/* Gestione pause */
 
 static int prova_a_mettersi_in_pausa(int semid, StatoStazioni *stato, TipoStazione tipo) {
     int mutex = sem_mutex_stato_di(tipo);
@@ -101,7 +70,7 @@ static int prova_a_mettersi_in_pausa(int semid, StatoStazioni *stato, TipoStazio
 
     sem_wait_idx(semid, mutex);
     int occupate = stato->postazioni_totali[tipo] - stato->postazioni_libere[tipo];
-    concesso = (occupate > 1); /* dopo la mia uscita ne resterebbe >= 1 presidiata */
+    concesso = (occupate > 1); 
     if (concesso) stato->operatori_in_pausa[tipo]++;
     sem_signal_idx(semid, mutex);
 
@@ -115,12 +84,7 @@ static void rientra_dalla_pausa(int semid, StatoStazioni *stato, TipoStazione ti
     sem_signal_idx(semid, mutex);
 }
 
-/* ======================================================================
- * Erogazione di un primo o di un secondo (sez. 5.5): se il piatto scelto
- * e' esaurito viene sostituito con un altro piatto disponibile dello
- * stesso tipo; se sono esauriti tutti, l'esito e' ESITO_TIPO_ESAURITO e
- * sara' l'utente a decidere come proseguire.
- * ====================================================================== */
+/* Erogazione di un primo o di un secondo*/
 
 static void eroga_primo_o_secondo(int semid, StatoStazioni *stato, TipoStazione tipo,
                                   int scelta_idx, int *out_idx, int *out_prezzo, int *out_esito) {
@@ -177,11 +141,7 @@ static void eroga_primo_o_secondo(int semid, StatoStazioni *stato, TipoStazione 
     *out_esito  = esito;
 }
 
-/* Dolce e caffe' (sez. 5.2): quantita' illimitata, quindi sempre servibili.
- * Una sola visita alla stazione coffee eroga il dolce e/o il caffe'
- * richiesti (indice negativo = prodotto non desiderato). */
-static void eroga_coffee(int semid, StatoStazioni *stato, const MsgRichiestaCibo *req,
-                         int *out_prezzo, int *out_dolce_servito, int *out_caffe_servito) {
+static void eroga_coffee(int semid, StatoStazioni *stato, const MsgRichiestaCibo *req, int *out_prezzo, int *out_dolce_servito, int *out_caffe_servito) {
     int mutex = sem_mutex_stato_di(STAZIONE_COFFEE);
     sem_wait_idx(semid, mutex);
 
@@ -205,9 +165,7 @@ static void eroga_coffee(int semid, StatoStazioni *stato, const MsgRichiestaCibo
     *out_caffe_servito = caffe;
 }
 
-/* ======================================================================
- * Servizio di una singola richiesta di cibo (primi / secondi / coffee)
- * ====================================================================== */
+/* Servizio di una singola richiesta di cibo (primi / secondi / coffee) */
 
 static void servi_richiesta_cibo(const Config *cfg, int semid, int mq, StatoStazioni *stato,
                                  Statistiche *stats, TipoStazione tipo, const MsgRichiestaCibo *req) {
@@ -218,8 +176,6 @@ static void servi_richiesta_cibo(const Config *cfg, int semid, int mq, StatoStaz
         default:               avg_srvc = cfg->avg_srvc_coffee;      variabilita = 80; break;
     }
 
-    /* non interrompibile: chi e' gia' allo sportello viene servito
-     * comunque, anche se nel frattempo la giornata finisce (sez. 5.3) */
     sim_sleep_sec(cfg->n_nano_secs, sim_rand_intorno(avg_srvc, variabilita));
 
     MsgRispostaCibo risposta;
@@ -228,17 +184,12 @@ static void servi_richiesta_cibo(const Config *cfg, int semid, int mq, StatoStaz
     risposta.contorno_idx = -1;
 
     if (tipo == STAZIONE_PRIMI || tipo == STAZIONE_SECONDI) {
-        eroga_primo_o_secondo(semid, stato, tipo, req->scelta_idx,
-                              &risposta.piatto_idx, &risposta.prezzo, &risposta.esito);
+        eroga_primo_o_secondo(semid, stato, tipo, req->scelta_idx, &risposta.piatto_idx, &risposta.prezzo, &risposta.esito);
 
         if (risposta.esito != ESITO_TIPO_ESAURITO) {
-            stats_record_piatto_distribuito(stats, semid,
-                (tipo == STAZIONE_PRIMI) ? TIPO_PRIMO : TIPO_SECONDO);
+            stats_record_piatto_distribuito(stats, semid, (tipo == STAZIONE_PRIMI) ? TIPO_PRIMO : TIPO_SECONDO);
 
-            /* il contorno accompagna il secondo ed e' compreso nel suo
-             * prezzo (sez. 5.4): viene comunque conteggiato a parte */
-            if (tipo == STAZIONE_SECONDI && req->contorno_idx >= 0 &&
-                req->contorno_idx < stato->secondi.num_contorni) {
+            if (tipo == STAZIONE_SECONDI && req->contorno_idx >= 0 && req->contorno_idx < stato->secondi.num_contorni) {
                 risposta.contorno_idx = req->contorno_idx;
                 stats_record_piatto_distribuito(stats, semid, TIPO_CONTORNO);
             }
@@ -260,15 +211,12 @@ static void servi_richiesta_cibo(const Config *cfg, int semid, int mq, StatoStaz
     }
 }
 
-/* ======================================================================
- * Cassa (sez. 5.4): calcolo dell'importo dovuto da un singolo membro del
- * gruppo e incasso dell'intero gruppo.
- * ====================================================================== */
+/* Cassa */
 
 static int importo_membro(const Config *cfg, const MsgRichiestaCassa *req, int i) {
     int totale = 0;
     if (req->ha_primo[i])   totale += cfg->price_primi;
-    if (req->ha_secondo[i]) totale += cfg->price_secondi;   /* contorno incluso */
+    if (req->ha_secondo[i]) totale += cfg->price_secondi;   
     if (req->ha_dolce[i])   totale += cfg->price_dolce;
     if (req->ha_caffe[i])   totale += cfg->price_coffee;
     return totale;
@@ -281,12 +229,9 @@ static void incassa_gruppo(const Config *cfg, int semid, int mq_cassa,
     if (num > MAX_GRUPPO) num = MAX_GRUPPO;
 
     for (int i = 0; i < num; i++) {
-        /* il guasto ai pagamenti automatici blocca la cassa: attesa
-         * passiva sul semaforo, nessuna attesa attiva (sez. 6) */
         sem_wait_idx(semid, SEM_CASSA_ATTIVA);
         sem_signal_idx(semid, SEM_CASSA_ATTIVA);
 
-        /* sez. 5: tempo di servizio nell'intorno +-20% di AVG_SRVC_CASSA */
         sim_sleep_sec(cfg->n_nano_secs, sim_rand_intorno(cfg->avg_srvc_cassa, 20));
 
         int totale = importo_membro(cfg, req, i);
@@ -313,21 +258,11 @@ static void incassa_gruppo(const Config *cfg, int semid, int mq_cassa,
     }
 }
 
-/* ======================================================================
- * Svuotamento di fine giornata: chi ha gia' inviato una richiesta a
- * questa stazione prima della chiusura resta bloccato in un msgrcv che
- * attende proprio la nostra risposta (mtype = proprio pid): se ce ne
- * andiamo senza rispondere, quell'utente resterebbe in attesa per sempre
- * (nessun altro processo puo' rispondergli), e il responsabile non
- * raggiungerebbe mai la barriera di fine giornata. Svuotiamo quindi la
- * coda (non bloccante, si ferma appena e' vuota) rispondendo "esaurito" /
- * "non pagato" a chiunque sia rimasto in sospeso.
- * ====================================================================== */
+/* Svuotamento di fine giornata */
 
 static void svuota_coda_cibo(int mq) {
     MsgRichiestaCibo richiesta;
-    while (msgrcv(mq, &richiesta, sizeof(richiesta) - sizeof(long),
-                  MSG_RICHIESTA, IPC_NOWAIT) != -1) {
+    while (msgrcv(mq, &richiesta, sizeof(richiesta) - sizeof(long), MSG_RICHIESTA, IPC_NOWAIT) != -1) {
         MsgRispostaCibo risposta;
         memset(&risposta, 0, sizeof(risposta));
         risposta.mtype        = (long)richiesta.utente_pid;
@@ -344,8 +279,7 @@ static void svuota_coda_cibo(int mq) {
 
 static void svuota_coda_cassa(int mq_cassa) {
     MsgRichiestaCassa req;
-    while (msgrcv(mq_cassa, &req, sizeof(req) - sizeof(long),
-                  MSG_RICHIESTA, IPC_NOWAIT) != -1) {
+    while (msgrcv(mq_cassa, &req, sizeof(req) - sizeof(long), MSG_RICHIESTA, IPC_NOWAIT) != -1) {
         int num = req.num_membri;
         if (num < 1) num = 1;
         if (num > MAX_GRUPPO) num = MAX_GRUPPO;
@@ -354,7 +288,7 @@ static void svuota_coda_cassa(int mq_cassa) {
             MsgRispostaCassa resp;
             memset(&resp, 0, sizeof(resp));
             resp.mtype            = (long)req.membri_pid[i];
-            resp.totale_pagato    = -1;   /* sentinella: pagamento non riuscito */
+            resp.totale_pagato    = -1;  
             resp.sconto_applicato = 0;
             while (msgsnd(mq_cassa, &resp, sizeof(resp) - sizeof(long), 0) == -1) {
                 if (errno == EINTR) continue;
@@ -364,12 +298,9 @@ static void svuota_coda_cassa(int mq_cassa) {
     }
 }
 
-/* ======================================================================
- * Una giornata di servizio, alla stazione assegnata per oggi
- * ====================================================================== */
+/* Una giornata di servizio, alla stazione assegnata per oggi */
 
-static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *stato,
-                                 Statistiche *stats, const CodeStazioni *code,
+static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *stato, Statistiche *stats, const CodeStazioni *code,
                                  TipoStazione tipo, int id) {
     int pause_fatte = 0;
     int mq = mq_di(code, tipo);
@@ -381,7 +312,7 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
         if (tipo == STAZIONE_CASSA) {
             MsgRichiestaCassa req;
             if (msgrcv(mq, &req, sizeof(req) - sizeof(long), MSG_RICHIESTA, 0) == -1) {
-                if (errno == EINTR) continue;   /* rivaluta i flag di fine giornata */
+                if (errno == EINTR) continue; 
                 if (errno != EIDRM && errno != EINVAL) perror("operatore: msgrcv cassa");
                 break;
             }
@@ -396,11 +327,7 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
             servi_richiesta_cibo(cfg, semid, mq, stato, stats, tipo, &richiesta);
         }
 
-        /* sez. 5.3: al massimo NOF_PAUSE pause al giorno, decise dopo
-         * aver terminato di servire il cliente corrente e solo se la
-         * stazione resta comunque presidiata */
-        if (!devo_fermarmi() && pause_fatte < cfg->nof_pause &&
-            sim_rand_range(0, 99) < cfg->pause_probability &&
+        if (!devo_fermarmi() && pause_fatte < cfg->nof_pause && sim_rand_range(0, 99) < cfg->pause_probability &&
             prova_a_mettersi_in_pausa(semid, stato, tipo)) {
 
             rilascia_postazione(semid, stato, tipo);
@@ -412,10 +339,10 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
 
             rientra_dalla_pausa(semid, stato, tipo);
 
-            if (!devo_fermarmi()) {
+            if (!devo_fermarmi()) { 
                 postazione_occupata = acquisisci_postazione(semid, stato, tipo);
                 if (postazione_occupata)
-                    stats_record_operatore_attivo(stats, semid, id); /* idempotente */
+                    stats_record_operatore_attivo(stats, semid, id); 
             }
         }
     }
@@ -427,9 +354,7 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
     }
 }
 
-/* ======================================================================
- * MAIN
- * ====================================================================== */
+/* MAIN */
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -446,7 +371,7 @@ int main(int argc, char *argv[]) {
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handler_fine_giorno;
-    sa.sa_flags = 0;  /* NIENTE SA_RESTART: msgrcv/semop devono ritornare EINTR */
+    sa.sa_flags = 0;
     sigaction(SIGUSR1, &sa, NULL);
 
     memset(&sa, 0, sizeof(sa));
@@ -468,9 +393,6 @@ int main(int argc, char *argv[]) {
     StatoStazioni *stato = shm_stazioni_attach(shm_st_id);
     Statistiche   *stats = shm_stats_attach(shm_stats_id);
 
-    /* fine inizializzazione: segnala pronto e attende l'inizio della prima
-     * giornata (sez. 5.1: la simulazione parte solo quando tutti i processi
-     * hanno terminato la fase di inizializzazione) */
     sem_signal_idx(semid, SEM_BARRIERA_READY);
 
     while (!simulazione_finita) {
@@ -479,14 +401,10 @@ int main(int argc, char *argv[]) {
 
         giorno_finito = 0;
 
-        /* la stazione di oggi e' stata scritta dal responsabile PRIMA di
-         * questo signal su SEM_GATE_START, quindi e' gia' visibile qui
-         * senza bisogno di un mutex dedicato (sez. 5.2) */
         TipoStazione tipo = stato->stazione_operatore_oggi[id];
 
         giornata_di_servizio(&cfg, semid, stato, stats, &code, tipo, id);
 
-        /* barriera di fine giornata verso il responsabile */
         sem_signal_idx(semid, SEM_BARRIERA_READY);
     }
 

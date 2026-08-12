@@ -19,19 +19,17 @@ union semun {
 };
 
 static int g_shm_stazioni_id = -1;
-static int g_shm_stats_id    = -1;
-static int g_semid           = -1;
+static int g_shm_stats_id = -1;
+static int g_semid = -1;
 
-static int g_msgq_primi      = -1;
-static int g_msgq_secondi    = -1;
-static int g_msgq_coffee     = -1;
-static int g_msgq_cassa      = -1;
-static int g_msgq_gruppo     = -1;
-static int g_msgq_addusers   = -1;
+static int g_msgq_primi = -1;
+static int g_msgq_secondi = -1;
+static int g_msgq_coffee = -1;
+static int g_msgq_cassa = -1;
+static int g_msgq_gruppo = -1;
+static int g_msgq_addusers = -1;
 
-/* ======================================================================
- * Utility
- * ====================================================================== */
+/* Utility */
 
 static key_t genera_chiave(const char *path, int proj_id) {
     key_t key = ftok(path, proj_id);
@@ -42,9 +40,7 @@ static key_t genera_chiave(const char *path, int proj_id) {
     return key;
 }
 
-/* ======================================================================
- * Shared memory: stato stazioni
- * ====================================================================== */
+/* Shared memory: stazioni */
 
 int shm_stazioni_get(int create) {
     key_t key = genera_chiave(FTOK_PATH_SHM_STAZIONI, FTOK_PROJ_ID_SHM_STAZIONI);
@@ -76,9 +72,7 @@ void shm_stazioni_init(StatoStazioni *stato) {
     memset(stato, 0, sizeof(*stato));
 }
 
-/* ======================================================================
- * Shared memory: statistiche
- * ====================================================================== */
+/* Shared memory: statistiche */
 
 int shm_stats_get(int create) {
     key_t key = genera_chiave(FTOK_PATH_SHM_STATS, FTOK_PROJ_ID_SHM_STATS);
@@ -110,9 +104,7 @@ void shm_stats_init(Statistiche *stats) {
     memset(stats, 0, sizeof(*stats));
 }
 
-/* ======================================================================
- * Semafori
- * ====================================================================== */
+/* Semafori */
 
 int sem_set_get(int create) {
     key_t key = genera_chiave(FTOK_PATH_SEM, FTOK_PROJ_ID_SEM);
@@ -129,11 +121,11 @@ int sem_set_get(int create) {
 void sem_set_init(int semid, const IpcSeatCounts *seats) {
     unsigned short valori[NUM_SEMAFORI];
 
-    valori[SEM_MUTEX_STATS]          = 1;
-    valori[SEM_MUTEX_STATO_PRIMI]    = 1;
-    valori[SEM_MUTEX_STATO_SECONDI]  = 1;
-    valori[SEM_MUTEX_STATO_COFFEE]   = 1;
-    valori[SEM_MUTEX_STATO_CASSA]    = 1;
+    valori[SEM_MUTEX_STATS] = 1;
+    valori[SEM_MUTEX_STATO_PRIMI] = 1;
+    valori[SEM_MUTEX_STATO_SECONDI] = 1;
+    valori[SEM_MUTEX_STATO_COFFEE] = 1;
+    valori[SEM_MUTEX_STATO_CASSA] = 1;
 
     valori[SEM_POSTAZIONI_PRIMI] = seats->postazioni_primi;
     valori[SEM_POSTAZIONI_SECONDI] = seats->postazioni_secondi;
@@ -166,9 +158,6 @@ static void sem_op(int semid, int idx, int delta) {
     while (semop(semid, &op, 1) == -1) {
         if (errno == EINTR)
             continue;
-        /* il set di semafori non esiste piu': la simulazione e' finita e
-         * il responsabile ha gia' deallocato le IPC, quindi non e' un
-         * errore ma la normale conclusione del processo */
         if (errno == EIDRM || errno == EINVAL)
             _exit(EXIT_SUCCESS);
         perror("semop");
@@ -198,9 +187,7 @@ int sem_wait_idx_intr(int semid, int idx) {
     return 0;
 }
 
-/* ======================================================================
- * Code messaggi
- * ====================================================================== */
+/* Code messaggi */
 
 static int msgq_get_generic(const char *path, int proj_id, int create) {
     key_t key = genera_chiave(path, proj_id);
@@ -247,8 +234,6 @@ long msgq_num_messaggi(int msgid) {
 }
 
 int msgq_svuota(int msgid) {
-    /* buffer dimensionato sul piu' grande dei messaggi del progetto,
-     * altrimenti msgrcv fallirebbe con E2BIG senza consumare nulla */
     union {
         MsgRichiestaCibo  richiesta_cibo;
         MsgRispostaCibo   risposta_cibo;
@@ -264,9 +249,7 @@ int msgq_svuota(int msgid) {
     return scartati;
 }
 
-/* ======================================================================
- * Cleanup
- * ====================================================================== */
+/* Cleanup */
 
 void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo, int msgq_addusers) {
     if (shm_stazioni_id != -1)
@@ -301,14 +284,10 @@ void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int
     g_msgq_addusers  = msgq_addusers;
 }
 
-/* Il responsabile e' l'unico processo che crea risorse IPC: se viene
- * interrotto (Ctrl-C) porta con se' tutti i figli e poi le dealloca. */
 static void cleanup_signal_handler(int signo) {
     (void)signo;
     killpg(0, SIGTERM);
-    ipc_cleanup_all(g_shm_stazioni_id, g_shm_stats_id, g_semid, g_msgq_primi,
-                    g_msgq_secondi, g_msgq_coffee, g_msgq_cassa, g_msgq_gruppo,
-                    g_msgq_addusers);
+    ipc_cleanup_all(g_shm_stazioni_id, g_shm_stats_id, g_semid, g_msgq_primi, g_msgq_secondi, g_msgq_coffee, g_msgq_cassa, g_msgq_gruppo, g_msgq_addusers);
     _exit(EXIT_FAILURE);
 }
 

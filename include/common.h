@@ -5,9 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-/* ======================================================================
- * Percorsi / chiavi IPC
- * ====================================================================== */
+/* Percorsi / chiavi IPC */ 
 
 #define CONFIG_PATH_DEFAULT   "config/config.conf"
 
@@ -31,9 +29,7 @@
 #define FTOK_PROJ_ID_MSGQ_GRUPPO  'H'
 #define FTOK_PROJ_ID_MSGQ_ADDUSERS 'I'
 
-/* ======================================================================
- * Limiti statici (per dimensionare array in shared memory / messaggi)
- * ====================================================================== */
+/* Limiti statici */
 
 #define MAX_PIATTI_PRIMI     8
 #define MAX_PIATTI_SECONDI   8
@@ -48,9 +44,7 @@
 #define TERMINAZIONE_TIMEOUT  1
 #define TERMINAZIONE_OVERLOAD 2
 
-/* ======================================================================
- * Tipi di stazione / piatto
- * ====================================================================== */
+/* Tipi di stazione / piatto */
 
 typedef enum {
     STAZIONE_PRIMI = 0,
@@ -77,19 +71,17 @@ typedef enum {
 } TipoCaffe;
 
 typedef enum {
-    ESITO_OK = 0,          /* servito il piatto richiesto */
-    ESITO_SOSTITUITO,      /* piatto richiesto finito: servito un altro dello stesso tipo */
-    ESITO_TIPO_ESAURITO    /* tutti i piatti di quel tipo sono finiti */
+    ESITO_OK = 0, /* servito il piatto richiesto */
+    ESITO_SOSTITUITO, /* piatto richiesto finito, servito un altro dello stesso tipo */
+    ESITO_TIPO_ESAURITO /* tutti i piatti di quel tipo sono finiti */
 } EsitoServizio;
 
 typedef struct {
     char nome[MAX_NOME_PIATTO];
-    int  prezzo;           /* in centesimi */
+    int  prezzo; /* in centesimi */
 } Piatto;
 
-/* ======================================================================
- * Shared memory: stato "vivo" delle stazioni di distribuzione
- * ====================================================================== */
+/* Shared memory: stazioni */
 
 typedef struct {
     Piatto piatti[MAX_PIATTI_PRIMI];
@@ -127,31 +119,15 @@ typedef struct {
     int operatori_assegnati[NUM_STAZIONI];
     int operatori_in_pausa[NUM_STAZIONI];
 
-    /* Stazione assegnata a ciascun operatore nella giornata corrente
-     * (indicizzata per id operatore, 0..NOF_WORKERS-1). Scritta dal
-     * responsabile ogni mattina, PRIMA di rilasciare SEM_GATE_START: la
-     * signal sul semaforo fa da barriera di memoria, quindi ogni
-     * operatore la legge in modo sicuro subito dopo essersi svegliato dal
-     * cancello, senza bisogno di un mutex dedicato (sez. 5.2: "la politica
-     * di associazione operatore-servizio ... deve essere applicata
-     * all'inizio di ogni giorno"). */
-    TipoStazione stazione_operatore_oggi[NOF_WORKERS_MAX];
+    TipoStazione stazione_operatore_oggi[NOF_WORKERS_MAX]; /* Stazione assegnata a ciascun operatore nella giornata corrente */
 
-    /* utenti attualmente in coda presso una qualsiasi stazione */
     int utenti_in_attesa;
-    /* utenti che, alla chiusura della mensa, erano ancora in coda e hanno
-     * quindi rinunciato al pasto: e' il valore confrontato con
-     * OVERLOAD_THRESHOLD per la terminazione per overload (sez. 5.6) */
-    int utenti_in_coda_fine_giornata;
+    int utenti_in_coda_fine_giornata; /* Utenti che alla chiusura della mensa erano ancora in coda */
 
-    /* numero di processi figli attesi alle barriere di sincronizzazione
-     * (cresce se add_users inserisce nuovi utenti a simulazione avviata) */
-    int nof_children_totali;
+    int nof_children_totali; /* Numero di processi figli attesi alle barriere di sincronizzazione */
 } StatoStazioni;
 
-/* ======================================================================
- * Shared memory: statistiche
- * ====================================================================== */
+/* Shared memory: statistiche */
 
 typedef struct {
     long utenti_serviti_oggi;
@@ -206,48 +182,36 @@ typedef struct {
     int motivo_terminazione;
 } Statistiche;
 
-/* ======================================================================
- * Messaggi per le code (utente <-> operatore stazione)
- * ====================================================================== */
+/* Messaggi per le code (utente <-> operatore stazione) */
 
 #define MSG_RICHIESTA 1L
 
-/* Richiesta inviata dall'utente alla coda della stazione. Il campo
- * tipo_piatto indica quale stazione/servizio: TIPO_PRIMO (stazione primi),
- * TIPO_SECONDO (stazione secondi, con eventuale contorno), TIPO_DOLCE
- * (visita alla stazione coffee, che eroga dolce e/o caffe' in un colpo
- * solo: dolce_idx < 0 => niente dolce, tipo_caffe < 0 => niente caffe'). */
 typedef struct {
-    long   mtype;         /* sempre MSG_RICHIESTA */
-    pid_t  utente_pid;    /* mtype con cui l'operatore risponde */
+    long   mtype; /* sempre MSG_RICHIESTA */
+    pid_t  utente_pid; /* mtype con cui l'operatore risponde */
     int    tipo_piatto;
-    int    scelta_idx;    /* indice del primo/secondo desiderato */
-    int    contorno_idx;  /* stazione secondi: contorno scelto, -1 = nessuno */
-    int    tipo_caffe;    /* stazione coffee: TipoCaffe desiderato, -1 = nessuno */
-    int    dolce_idx;     /* stazione coffee: dolce desiderato, -1 = nessuno */
+    int    scelta_idx;    
+    int    contorno_idx;  
+    int    tipo_caffe;    
+    int    dolce_idx;
 } MsgRichiestaCibo;
 
 typedef struct {
-    long mtype;           /* pid dell'utente destinatario */
-    int  esito;           /* EsitoServizio */
-    int  piatto_idx;      /* indice effettivamente servito (puo' differire) */
-    int  contorno_idx;    /* contorno effettivamente servito, -1 se assente */
-    int  prezzo;          /* prezzo del/i piatto/i erogato/i, in centesimi */
+    long mtype; /* pid dell'utente destinatario */
+    int  esito;           
+    int  piatto_idx;      
+    int  contorno_idx;   
+    int  prezzo;          
 } MsgRispostaCibo;
 
-/* ======================================================================
- * Messaggi per la coda cassa
- * ====================================================================== */
+/* Messaggi per la coda cassa */
 
-/* Richiesta di pagamento: sempre inviata dal capogruppo, che ha gia'
- * raccolto gli ordini di tutti i membri del proprio gruppo (sez. 6:
- * "per mangiare insieme devono andare a pagare solo dopo essersi
- * riforniti di tutti i piatti che desiderano acquistare"). Un utente
- * singolo e' semplicemente un gruppo di un solo membro. */
+/* Richiesta di pagamento è sempre inviata dal capogruppo. Un utente
+ * singolo e' un gruppo di un solo membro. */
 typedef struct {
-    long   mtype;                    /* sempre MSG_RICHIESTA */
-    pid_t  richiedente_pid;          /* pid del capogruppo */
-    int    num_membri;               /* membri effettivamente presenti alla cassa */
+    long   mtype; /* sempre MSG_RICHIESTA */
+    pid_t  richiedente_pid; /* pid del capogruppo */
+    int    num_membri;
     pid_t  membri_pid[MAX_GRUPPO];
     int    ha_ticket[MAX_GRUPPO];
     int    ha_primo[MAX_GRUPPO];
@@ -261,31 +225,19 @@ typedef struct {
     int    tipo_caffe[MAX_GRUPPO];
 } MsgRichiestaCassa;
 
-/* Il cassiere risponde singolarmente a ciascun membro del gruppo.
- * totale_pagato == -1 e' una sentinella: significa che la cassa ha
- * chiuso prima di poter incassare questa richiesta (rimasta in coda a
- * fine giornata), quindi il pagamento NON e' andato a buon fine e
- * l'utente rinuncia al pasto, pur avendo gia' ottenuto i piatti dalle
- * stazioni di distribuzione (sez. 5.5). Un pagamento riuscito e' sempre
- * >= 0. */
+/* Il cassiere risponde singolarmente a ciascun membro del gruppo. */
 typedef struct {
-    long mtype;             /* pid del membro */
-    int  totale_pagato;     /* in centesimi, sconto ticket gia' applicato; -1 = non pagato */
-    int  sconto_applicato;  /* in centesimi */
+    long mtype; /* pid del membro */
+    int  totale_pagato;     
+    int  sconto_applicato;  
 } MsgRispostaCassa;
 
-/* ======================================================================
- * Messaggio: membro di un gruppo -> capogruppo (pre-cassa)
- * ====================================================================== */
+/* Messaggio: membro di un gruppo -> capogruppo */
 
-/* Ogni membro invia esattamente un messaggio al giorno al proprio
- * capogruppo, anche quando non partecipa al pranzo (partecipa = 0):
- * cosi' il capogruppo sa sempre quanti messaggi attendere e non resta
- * mai bloccato indefinitamente. */
 typedef struct {
-    long  mtype;          /* pid del capogruppo */
+    long  mtype; /* pid del capogruppo */
     pid_t membro_pid;
-    int   partecipa;      /* 0 = non pranza oggi / non ha ottenuto piatti */
+    int   partecipa; /* 0 = non pranza oggi */
     int   ha_ticket;
     int   ha_primo;
     int   primo_idx;
@@ -298,32 +250,16 @@ typedef struct {
     int   tipo_caffe;
 } MsgOrdineGruppo;
 
-/* ======================================================================
- * Messaggio: richiesta di aggiunta utenti (versione completa, sez. 6)
- *
- * L'eseguibile ./bin/add_users NON crea processi direttamente: si limita
- * a inviare al responsabile una richiesta su questa coda. E' sempre il
- * responsabile a fare fork/exec dei nuovi utenti, cosi' che questi
- * nascano automaticamente nel suo stesso process group (un figlio eredita
- * il pgid del padre) e possano essere raggiunti da killpg() e attesi con
- * waitpid() esattamente come quelli creati all'avvio. Delegare la fork
- * ad add_users stesso non funzionerebbe se invocato da un terminale
- * diverso da quello del responsabile: setpgid() puo' unire un processo
- * solo a un process group della propria sessione, quindi fallirebbe con
- * EPERM e i nuovi utenti non riceverebbero mai i segnali di fine
- * giornata/simulazione, bloccando per sempre la barriera del responsabile.
- * ====================================================================== */
+/* Messaggio: richiesta di aggiunta utenti */
 
 #define MSG_ADDUSERS_RICHIESTA 1L
 
 typedef struct {
-    long mtype;      /* sempre MSG_ADDUSERS_RICHIESTA */
-    int  n_utenti;   /* numero di nuovi utenti richiesti */
+    long mtype; /* sempre MSG_ADDUSERS_RICHIESTA */
+    int  n_utenti;
 } MsgRichiestaAddUsers;
 
-/* ======================================================================
- * Semafori
- * ====================================================================== */
+/* Semafori */
 
 typedef enum {
     SEM_MUTEX_STATS = 0,
@@ -344,9 +280,7 @@ typedef enum {
     NUM_SEMAFORI
 } IndiceSemaforo;
 
-/* ======================================================================
- * Helper di conversione stazione <-> stringa
- * ====================================================================== */
+/* Helper di conversione */
 
 static inline const char *nome_stazione(TipoStazione s) {
     switch (s) {

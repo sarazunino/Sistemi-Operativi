@@ -7,9 +7,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-/* ======================================================================
- * Inizializzazione statistiche
- * ====================================================================== */
+/* Inizializzazione statistiche */
 
 void stats_init_global(Statistiche *stats) {
     if (!stats) return;
@@ -51,9 +49,7 @@ void stats_init_daily(Statistiche *stats) {
     stats->giorno_corrente++;
 }
 
-/* ======================================================================
- * Registrazione utenti
- * ====================================================================== */
+/* Registrazione utenti */
 
 void stats_record_attesa(Statistiche *stats, int semid, TipoStazione stazione, double wait_time) {
     if (!stats) return;
@@ -112,9 +108,7 @@ void stats_record_utente_non_servito(Statistiche *stats, int semid) {
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
-/* ======================================================================
- * Piatti
- * ====================================================================== */
+/* Piatti */
 
 void stats_record_piatto_distribuito(Statistiche *stats, int semid, TipoPiatto tipo) {
     if (!stats) return;
@@ -134,9 +128,7 @@ void stats_record_piatto_avanzato(Statistiche *stats, int semid, TipoPiatto tipo
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
-/* ======================================================================
- * Operatori e pause
- * ====================================================================== */
+/* Operatori e pause */
 
 void stats_record_pausa(Statistiche *stats, int semid) {
     if (!stats) return;
@@ -162,9 +154,7 @@ void stats_record_operatore_attivo(Statistiche *stats, int semid, int operatore_
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
-/* ======================================================================
- * Ricavi e ticket
- * ====================================================================== */
+/* Ricavi e ticket*/
 
 void stats_record_ricavo(Statistiche *stats, int semid, long importo_centesimi) {
     if (!stats) return;
@@ -189,9 +179,7 @@ void stats_record_ticket(Statistiche *stats, int semid, bool ha_ticket, long sco
     sem_signal_idx(semid, SEM_MUTEX_STATS);
 }
 
-/* ======================================================================
- * Helper di stampa
- * ====================================================================== */
+/* Helper di stampa*/
 
 static const char *nome_piatto(TipoPiatto tipo) {
     switch (tipo) {
@@ -208,9 +196,7 @@ static double media(double totale, long conteggio) {
     return (conteggio > 0) ? (totale / (double)conteggio) : 0.0;
 }
 
-/* ======================================================================
- * Stampa statistiche giornaliere (sez. 5.1: "quelle della giornata")
- * ====================================================================== */
+/* Stampa statistiche giornaliere */
 
 void stats_print_daily(const Statistiche *stats) {
     if (!stats) return;
@@ -256,9 +242,7 @@ void stats_print_daily(const Statistiche *stats) {
     }
 }
 
-/* ======================================================================
- * Stampa statistiche totali (sez. 5.1, elenco riportato nell'header)
- * ====================================================================== */
+/* Stampa statistiche totali */
 
 void stats_print_total(const Statistiche *stats) {
     if (!stats) return;
@@ -313,32 +297,16 @@ void stats_print_total(const Statistiche *stats) {
     }
 }
 
-/* ======================================================================
- * CSV (sez. 6: tutte le statistiche prodotte devono essere salvate in CSV)
- * ====================================================================== */
-
-static void crea_cartella_output_se_necessario(const char *filepath) {
-    char tmp[256];
-    snprintf(tmp, sizeof(tmp), "%s", filepath);
-    char *p = strrchr(tmp, '/');
-    if (p != NULL) {
-        *p = '\0';
-        struct stat st = {0};
-        if (stat(tmp, &st) == -1) {
-            mkdir(tmp, 0700);
-        }
-    }
-}
+/* CSV */
 
 static int file_vuoto(const char *filepath) {
     struct stat st;
-    if (stat(filepath, &st) != 0) return 1; /* non esiste ancora -> va creato con header */
+    if (stat(filepath, &st) != 0) return 1; 
     return st.st_size == 0;
 }
 
 void stats_export_to_csv(const Statistiche *stats, const char *filepath, int giorno) {
     if (!stats || !filepath) return;
-    crea_cartella_output_se_necessario(filepath);
 
     int serve_header = file_vuoto(filepath);
 
@@ -349,8 +317,7 @@ void stats_export_to_csv(const Statistiche *stats, const char *filepath, int gio
     }
 
     if (serve_header) {
-        fprintf(f,
-            "giorno,utenti_serviti,utenti_non_serviti,utenti_che_hanno_mangiato,"
+        fprintf(f, "giorno,utenti_serviti,utenti_non_serviti,utenti_che_hanno_mangiato,"
             "primi_distribuiti,secondi_distribuiti,contorni_distribuiti,dolci_distribuiti,caffe_distribuiti,"
             "primi_avanzati,secondi_avanzati,contorni_avanzati,dolci_avanzati,caffe_avanzati,"
             "attesa_media_primi,attesa_media_secondi,attesa_media_coffee,attesa_media_cassa,"
@@ -360,8 +327,7 @@ void stats_export_to_csv(const Statistiche *stats, const char *filepath, int gio
             "operatori_attivi_tot,pause_tot,ricavo_tot_eur\n");
     }
 
-    fprintf(f, "%d,%ld,%ld,%ld,", giorno, stats->utenti_serviti_oggi,
-            stats->utenti_non_serviti_oggi, stats->utenti_che_hanno_mangiato_oggi);
+    fprintf(f, "%d,%ld,%ld,%ld,", giorno, stats->utenti_serviti_oggi, stats->utenti_non_serviti_oggi, stats->utenti_che_hanno_mangiato_oggi);
 
     for (int i = 0; i < NUM_TIPI_PIATTO; i++) fprintf(f, "%ld,", stats->piatti_distribuiti_oggi[i]);
     for (int i = 0; i < NUM_TIPI_PIATTO; i++) fprintf(f, "%ld,", stats->piatti_avanzati_oggi[i]);
@@ -371,9 +337,7 @@ void stats_export_to_csv(const Statistiche *stats, const char *filepath, int gio
     fprintf(f, "%.2f,", media(stats->somma_attesa_complessiva_oggi, stats->conteggio_attesa_complessivo_oggi));
     fprintf(f, "%.2f,", media(stats->somma_attesa_ticket_oggi, stats->conteggio_attesa_ticket_oggi));
 
-    fprintf(f, "%d,%ld,%ld,%ld,%.2f,%.2f,",
-            stats->operatori_attivi_oggi, stats->pause_oggi,
-            stats->utenti_con_ticket_oggi, stats->utenti_senza_ticket_oggi,
+    fprintf(f, "%d,%ld,%ld,%ld,%.2f,%.2f,", stats->operatori_attivi_oggi, stats->pause_oggi, stats->utenti_con_ticket_oggi, stats->utenti_senza_ticket_oggi,
             (double)stats->sconto_ticket_oggi / 100.0, (double)stats->ricavo_oggi / 100.0);
 
     long distribuiti_tot = 0, avanzati_tot = 0;
@@ -381,11 +345,8 @@ void stats_export_to_csv(const Statistiche *stats, const char *filepath, int gio
         distribuiti_tot += stats->piatti_distribuiti_tot[i];
         avanzati_tot    += stats->piatti_avanzati_tot[i];
     }
-    fprintf(f, "%ld,%ld,%ld,%ld,%d,%ld,%.2f\n",
-            stats->utenti_serviti_tot, stats->utenti_non_serviti_tot,
-            distribuiti_tot, avanzati_tot,
-            stats->operatori_attivi_tot, stats->pause_tot,
-            (double)stats->ricavo_tot / 100.0);
+    fprintf(f, "%ld,%ld,%ld,%ld,%d,%ld,%.2f\n", stats->utenti_serviti_tot, stats->utenti_non_serviti_tot, distribuiti_tot, avanzati_tot,
+            stats->operatori_attivi_tot, stats->pause_tot, (double)stats->ricavo_tot / 100.0);
 
     fclose(f);
 }

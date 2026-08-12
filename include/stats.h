@@ -22,9 +22,6 @@ void stats_init_daily(Statistiche *stats);
 /**
  * @brief Registra il tempo di attesa di un utente presso una stazione.
  *
- * Va chiamata a ogni singola coda affrontata dall'utente; alimenta sia la
- * media per stazione sia la media complessiva.
- *
  * @param stats     Puntatore alla struttura Statistiche condivisa.
  * @param semid     Identificatore del set di semafori per la mutua
  *                  esclusione sull'aggiornamento.
@@ -38,9 +35,6 @@ void stats_record_attesa(Statistiche *stats, int semid, TipoStazione stazione, d
 /**
  * @brief Registra il tempo di attesa alla fila per la lettura del ticket.
  *
- * La lettura del ticket non e' una delle 4 stazioni della mensa, quindi
- * viene contabilizzata a parte.
- *
  * @param stats     Puntatore alla struttura Statistiche condivisa.
  * @param semid     Identificatore del set di semafori.
  * @param wait_time Tempo di attesa in millisecondi reali.
@@ -50,8 +44,6 @@ void stats_record_attesa_ticket(Statistiche *stats, int semid, double wait_time)
 /**
  * @brief Registra un utente servito, cioè che ha ottenuto almeno un piatto,
  *        ha pagato alla cassa e ha consumato il pasto.
- *
- * Da chiamare una sola volta per utente e per giornata.
  *
  * @param stats Puntatore alla struttura Statistiche condivisa.
  * @param semid Identificatore del set di semafori.
@@ -142,10 +134,6 @@ void stats_record_ticket(Statistiche *stats, int semid, bool ha_ticket, long sco
 /**
  * @brief Stampa a schermo le statistiche della giornata appena conclusa.
  *
- * Da chiamare ogni sera, prima di stats_init_daily() per la giornata
- * successiva (altrimenti i contatori "oggi" vengono azzerati prima
- * della stampa).
- *
  * @param stats Puntatore alla struttura Statistiche condivisa (const).
  */
 void stats_print_daily(const Statistiche *stats);
@@ -153,13 +141,6 @@ void stats_print_daily(const Statistiche *stats);
 /**
  * @brief Stampa a schermo le statistiche cumulative della simulazione,
  *        calcolate sui giorni trascorsi fino ad ora incluso.
- *
- * Da chiamare ogni sera, subito dopo stats_print_daily(), riportando:
- * utenti serviti/non serviti totali e medi al giorno; piatti
- * distribuiti/avanzati totali e per tipo, totali e medi al giorno;
- * tempo medio di attesa (complessivo e per stazione) su tutta la
- * simulazione; numero di operatori distinti attivi nella simulazione;
- * totale pause effettuate; ricavo totale e medio per giornata.
  *
  * @param stats Puntatore alla struttura Statistiche condivisa (const).
  */

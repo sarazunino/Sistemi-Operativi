@@ -22,7 +22,7 @@ typedef struct {
     TipoCampoConfig tipo;
 } CampoConfig;
 
-// Rimuove gli spazi iniziali e finali da una stringa.
+/* Rimuove gli spazi iniziali e finali da una stringa. */ 
 static void trim(char *s) {
     char *start = s;
 
@@ -43,25 +43,21 @@ Config config_load(const char *path) {
     Config cfg;
     memset(&cfg, 0, sizeof(cfg));
     CampoConfig tabella[] = {
-        /* Parametri simulazione */
         {"NOF_WORKERS", &cfg.nof_workers, NULL, NULL, CONFIG_INT},
         {"NOF_USERS", &cfg.nof_users, NULL, NULL, CONFIG_INT},
         {"NOF_TABLE_SEATS", &cfg.nof_table_seats, NULL, NULL, CONFIG_INT},
         {"AVG_CONSUMPTION_TIME", &cfg.avg_consumption_time, NULL, NULL, CONFIG_INT},
 
-        /* Postazioni */
         {"NOF_WK_SEATS_PRIMI", &cfg.nof_wk_seats_primi, NULL, NULL, CONFIG_INT},
         {"NOF_WK_SEATS_SECONDI", &cfg.nof_wk_seats_secondi, NULL, NULL, CONFIG_INT},
         {"NOF_WK_SEATS_COFFEE", &cfg.nof_wk_seats_coffee, NULL, NULL, CONFIG_INT},
         {"NOF_WK_SEATS_CASSA", &cfg.nof_wk_seats_cassa, NULL, NULL, CONFIG_INT},
 
-        /* Tempi servizio */
         {"AVG_SRVC_PRIMI", &cfg.avg_srvc_primi, NULL, NULL, CONFIG_INT},
         {"AVG_SRVC_MAIN_COURSE", &cfg.avg_srvc_main_course, NULL, NULL, CONFIG_INT},
         {"AVG_SRVC_COFFEE", &cfg.avg_srvc_coffee, NULL, NULL, CONFIG_INT},
         {"AVG_SRVC_CASSA", &cfg.avg_srvc_cassa, NULL, NULL, CONFIG_INT},
 
-        /* Gestione porzioni */
         {"AVG_REFILL_PRIMI", &cfg.avg_refill_primi, NULL, NULL, CONFIG_INT},
         {"AVG_REFILL_SECONDI", &cfg.avg_refill_secondi, NULL, NULL, CONFIG_INT},
         {"MAX_PORZIONI_PRIMI", &cfg.max_porzioni_primi, NULL, NULL, CONFIG_INT},
@@ -69,78 +65,63 @@ Config config_load(const char *path) {
         {"AVG_REFILL_TIME", &cfg.avg_refill_time, NULL, NULL, CONFIG_INT},
         {"REFILL_VARIABILITY_PERCENT", &cfg.refill_variability_percent, NULL, NULL, CONFIG_INT},
 
-        /* Probabilità menu */
         {"PROB_GO_TO_MENSA", &cfg.prob_vado_in_mensa, NULL, NULL, CONFIG_INT},
         {"PROB_PRIMO", &cfg.prob_primo, NULL, NULL, CONFIG_INT},
         {"PROB_SECONDO_CONTORNO", &cfg.prob_secondo_contorno, NULL, NULL, CONFIG_INT},
         {"PROB_DOLCE", &cfg.prob_dolce, NULL, NULL, CONFIG_INT},
         {"PROB_CAFFE", &cfg.prob_caffe, NULL, NULL, CONFIG_INT},
 
-        /* Prezzi */
         {"PRICE_PRIMI", &cfg.price_primi, NULL, NULL, CONFIG_INT},
         {"PRICE_SECONDI", &cfg.price_secondi, NULL, NULL, CONFIG_INT},
         {"PRICE_DOLCE", &cfg.price_dolce, NULL, NULL, CONFIG_INT},
         {"PRICE_COFFEE", &cfg.price_coffee, NULL, NULL, CONFIG_INT},
 
-        /* Pause */
         {"NOF_PAUSE", &cfg.nof_pause, NULL, NULL, CONFIG_INT},
         {"PAUSE_PROBABILITY", &cfg.pause_probability, NULL, NULL, CONFIG_INT},
         {"MIN_PAUSE_TIME", &cfg.min_pause_time, NULL, NULL, CONFIG_INT},
         {"MAX_PAUSE_TIME", &cfg.max_pause_time, NULL, NULL, CONFIG_INT},
 
-        /* Simulazione */
         {"SIM_DURATION", &cfg.sim_duration, NULL, NULL, CONFIG_INT},
         {"DAY_DURATION", &cfg.day_duration, NULL, NULL, CONFIG_INT},
         {"N_NANO_SECS", NULL, &cfg.n_nano_secs, NULL, CONFIG_LONG},
         {"OVERLOAD_THRESHOLD", &cfg.overload_threshold, NULL, NULL, CONFIG_INT},
 
-        /* Gruppi */
         {"MAX_USERS_PER_GROUP", &cfg.max_users_per_group, NULL, NULL, CONFIG_INT},
-        /* Versione completa */
+  
         {"STOP_DURATION", &cfg.stop_duration, NULL, NULL, CONFIG_INT},
         {"N_NEW_USERS", &cfg.n_new_users, NULL, NULL, CONFIG_INT},
 
-        /* Ticket */
         {"NOF_TICKET_READERS", &cfg.nof_ticket_readers, NULL, NULL, CONFIG_INT},
         {"AVG_SRVC_TICKET", &cfg.avg_srvc_ticket, NULL, NULL, CONFIG_INT},
         {"TICKET_DISCOUNT_PCT", &cfg.ticket_discount_pct, NULL, NULL, CONFIG_INT},
         {"TICKET_PERCENTAGE", &cfg.ticket_percentage, NULL, NULL, CONFIG_INT},
 
-        /* File */
         {"MENU_FILE_PATH", NULL, NULL, cfg.menu_file_path, CONFIG_STRING},
         {"CSV_OUTPUT_DIR", NULL, NULL, cfg.csv_output_dir, CONFIG_STRING}
     };
 
     const size_t n_campi = sizeof(tabella) / sizeof(tabella[0]);
     FILE *f = fopen(path, "r");
-
     if (!f) {
         fprintf(stderr,"config: impossibile aprire '%s': %s\n",path, strerror(errno));
         exit(EXIT_FAILURE);
     }
-
     char riga[MAX_RIGA];
     int trovati[128] = {0};
-
     while (fgets(riga, sizeof(riga), f)) {
         trim(riga);
         if (riga[0] == '\0' || riga[0] == '#')
             continue;
-
         char *eq = strchr(riga, '=');
         if (!eq)
             continue;
         *eq = '\0';
-
         char *chiave = riga;
         char *valore = eq + 1;
-
         char *commento = strchr(valore, '#');
         if (commento) *commento = '\0';
-
         trim(chiave);
         trim(valore);
-
         for (size_t i = 0; i < n_campi; i++) {
             if (strcmp(chiave, tabella[i].chiave) == 0) {
                 switch(tabella[i].tipo) {
@@ -160,15 +141,12 @@ Config config_load(const char *path) {
             }
         }
     }
-
     fclose(f);
-
     for (size_t i = 0; i < n_campi; i++) {
         if (!trovati[i]) {
             fprintf(stderr, "config: parametro '%s' non trovato in %s\n", tabella[i].chiave, path);
         }
     }
-
     return cfg;
 }
 
