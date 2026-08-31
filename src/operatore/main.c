@@ -15,10 +15,10 @@
 
 /* Flag di controllo  */
 
-static volatile sig_atomic_t giorno_finito      = 0; /* SIGUSR1: fine giornata */
+static volatile sig_atomic_t giorno_finito = 0; /* SIGUSR1: fine giornata */
 static volatile sig_atomic_t simulazione_finita = 0; /* SIGTERM: fine simulazione */
 
-static void handler_fine_giorno(int signo)      { (void)signo; giorno_finito = 1; }
+static void handler_fine_giorno(int signo) { (void)signo; giorno_finito = 1; }
 static void handler_fine_simulazione(int signo) { (void)signo; simulazione_finita = 1; }
 
 static int devo_fermarmi(void) { return giorno_finito || simulazione_finita; }
@@ -34,10 +34,10 @@ typedef struct {
 
 static int mq_di(const CodeStazioni *code, TipoStazione tipo) {
     switch (tipo) {
-        case STAZIONE_PRIMI:   return code->primi;
+        case STAZIONE_PRIMI: return code->primi;
         case STAZIONE_SECONDI: return code->secondi;
-        case STAZIONE_COFFEE:  return code->coffee;
-        default:                return code->cassa;
+        case STAZIONE_COFFEE: return code->coffee;
+        default:             return code->cassa;
     }
 }
 
@@ -95,14 +95,14 @@ static void eroga_primo_o_secondo(int semid, StatoStazioni *stato, TipoStazione 
     Piatto *piatti;
     if (tipo == STAZIONE_PRIMI) {
         num_piatti = stato->primi.num_piatti_oggi;
-        porzioni   = stato->primi.porzioni_disponibili;
-        piatti     = stato->primi.piatti;
-        esaurito   = &stato->primi.esaurito;
+        porzioni = stato->primi.porzioni_disponibili;
+        piatti = stato->primi.piatti;
+        esaurito = &stato->primi.esaurito;
     } else {
         num_piatti = stato->secondi.num_piatti_oggi;
-        porzioni   = stato->secondi.porzioni_disponibili;
-        piatti     = stato->secondi.piatti;
-        esaurito   = &stato->secondi.esaurito;
+        porzioni = stato->secondi.porzioni_disponibili;
+        piatti = stato->secondi.piatti;
+        esaurito = &stato->secondi.esaurito;
     }
 
     int idx   = (scelta_idx >= 0 && scelta_idx < num_piatti) ? scelta_idx : -1;
@@ -114,10 +114,10 @@ static void eroga_primo_o_secondo(int semid, StatoStazioni *stato, TipoStazione 
             if (porzioni[i] > 0) { trovato = i; break; }
         }
         if (trovato >= 0) {
-            idx   = trovato;
+            idx = trovato;
             esito = ESITO_SOSTITUITO;
         } else {
-            idx   = -1;
+            idx = -1;
             esito = ESITO_TIPO_ESAURITO;
         }
     }
@@ -136,9 +136,9 @@ static void eroga_primo_o_secondo(int semid, StatoStazioni *stato, TipoStazione 
 
     sem_signal_idx(semid, mutex);
 
-    *out_idx    = idx;
+    *out_idx = idx;
     *out_prezzo = prezzo;
-    *out_esito  = esito;
+    *out_esito = esito;
 }
 
 static void eroga_coffee(int semid, StatoStazioni *stato, const MsgRichiestaCibo *req, int *out_prezzo, int *out_dolce_servito, int *out_caffe_servito) {
@@ -146,8 +146,8 @@ static void eroga_coffee(int semid, StatoStazioni *stato, const MsgRichiestaCibo
     sem_wait_idx(semid, mutex);
 
     int prezzo = 0;
-    int dolce  = -1;
-    int caffe  = -1;
+    int dolce = -1;
+    int caffe = -1;
 
     if (req->dolce_idx >= 0 && stato->coffee.num_dolci > 0) {
         dolce = (req->dolce_idx < stato->coffee.num_dolci) ? req->dolce_idx : 0;
@@ -160,7 +160,7 @@ static void eroga_coffee(int semid, StatoStazioni *stato, const MsgRichiestaCibo
 
     sem_signal_idx(semid, mutex);
 
-    *out_prezzo        = prezzo;
+    *out_prezzo = prezzo;
     *out_dolce_servito = dolce;
     *out_caffe_servito = caffe;
 }
@@ -171,16 +171,16 @@ static void servi_richiesta_cibo(const Config *cfg, int semid, int mq, StatoStaz
                                  Statistiche *stats, TipoStazione tipo, const MsgRichiestaCibo *req) {
     int avg_srvc, variabilita;
     switch (tipo) {
-        case STAZIONE_PRIMI:   avg_srvc = cfg->avg_srvc_primi;       variabilita = 50; break;
+        case STAZIONE_PRIMI: avg_srvc = cfg->avg_srvc_primi; variabilita = 50; break;
         case STAZIONE_SECONDI: avg_srvc = cfg->avg_srvc_main_course; variabilita = 50; break;
-        default:               avg_srvc = cfg->avg_srvc_coffee;      variabilita = 80; break;
+        default:               avg_srvc = cfg->avg_srvc_coffee; variabilita = 80; break;
     }
 
     sim_sleep_sec(cfg->n_nano_secs, sim_rand_intorno(avg_srvc, variabilita));
 
     MsgRispostaCibo risposta;
     memset(&risposta, 0, sizeof(risposta));
-    risposta.mtype        = (long)req->utente_pid;
+    risposta.mtype = (long)req->utente_pid;
     risposta.contorno_idx = -1;
 
     if (tipo == STAZIONE_PRIMI || tipo == STAZIONE_SECONDI) {
@@ -198,7 +198,7 @@ static void servi_richiesta_cibo(const Config *cfg, int semid, int mq, StatoStaz
         int dolce_servito, caffe_servito;
         eroga_coffee(semid, stato, req, &risposta.prezzo, &dolce_servito, &caffe_servito);
 
-        risposta.esito      = ESITO_OK;
+        risposta.esito = ESITO_OK;
         risposta.piatto_idx = dolce_servito;
         if (dolce_servito >= 0) stats_record_piatto_distribuito(stats, semid, TIPO_DOLCE);
         if (caffe_servito >= 0) stats_record_piatto_distribuito(stats, semid, TIPO_CAFFE);
@@ -265,11 +265,11 @@ static void svuota_coda_cibo(int mq) {
     while (msgrcv(mq, &richiesta, sizeof(richiesta) - sizeof(long), MSG_RICHIESTA, IPC_NOWAIT) != -1) {
         MsgRispostaCibo risposta;
         memset(&risposta, 0, sizeof(risposta));
-        risposta.mtype        = (long)richiesta.utente_pid;
-        risposta.esito        = ESITO_TIPO_ESAURITO;
-        risposta.piatto_idx   = -1;
+        risposta.mtype = (long)richiesta.utente_pid;
+        risposta.esito = ESITO_TIPO_ESAURITO;
+        risposta.piatto_idx = -1;
         risposta.contorno_idx = -1;
-        risposta.prezzo       = 0;
+        risposta.prezzo = 0;
         while (msgsnd(mq, &risposta, sizeof(risposta) - sizeof(long), 0) == -1) {
             if (errno == EINTR) continue;
             break;
@@ -287,8 +287,8 @@ static void svuota_coda_cassa(int mq_cassa) {
         for (int i = 0; i < num; i++) {
             MsgRispostaCassa resp;
             memset(&resp, 0, sizeof(resp));
-            resp.mtype            = (long)req.membri_pid[i];
-            resp.totale_pagato    = -1;  
+            resp.mtype = (long)req.membri_pid[i];
+            resp.totale_pagato = -1;  
             resp.sconto_applicato = 0;
             while (msgsnd(mq_cassa, &resp, sizeof(resp) - sizeof(long), 0) == -1) {
                 if (errno == EINTR) continue;
@@ -349,7 +349,7 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
 
     if (postazione_occupata) {
         if (tipo == STAZIONE_CASSA) svuota_coda_cassa(mq);
-        else                        svuota_coda_cibo(mq);
+        else svuota_coda_cibo(mq);
         rilascia_postazione(semid, stato, tipo);
     }
 }
@@ -380,18 +380,18 @@ int main(int argc, char *argv[]) {
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT,  &sa, NULL);
 
-    int shm_st_id    = shm_stazioni_get(0);
+    int shm_st_id = shm_stazioni_get(0);
     int shm_stats_id = shm_stats_get(0);
-    int semid        = sem_set_get(0);
+    int semid = sem_set_get(0);
 
     CodeStazioni code;
-    code.primi   = msgq_primi_get(0);
+    code.primi = msgq_primi_get(0);
     code.secondi = msgq_secondi_get(0);
-    code.coffee  = msgq_coffee_get(0);
-    code.cassa   = msgq_cassa_get(0);
+    code.coffee = msgq_coffee_get(0);
+    code.cassa = msgq_cassa_get(0);
 
     StatoStazioni *stato = shm_stazioni_attach(shm_st_id);
-    Statistiche   *stats = shm_stats_attach(shm_stats_id);
+    Statistiche *stats = shm_stats_attach(shm_stats_id);
 
     sem_signal_idx(semid, SEM_BARRIERA_READY);
 

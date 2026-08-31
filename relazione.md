@@ -1,59 +1,47 @@
-# Relazione di progetto — Mensa Simulator (versione completa)
+# Relazione di progetto
 
-## 1. Introduzione
+Il progetto simula il funzionamento del servizio mensa ‘Oasi del Golfo’. Sono implementate sia la
+versione minima sia la versione completa.
 
-Il progetto simula il funzionamento di una mensa con code alle stazioni
-di distribuzione, cassa, tavoli, operatori con turni e pause, utenti con
-e senza ticket e gruppi che pranzano insieme. Sono implementate sia la
-versione minima sia la versione completa
-(communication disorder, aggiunta dinamica di utenti, export CSV,
-utenti con/senza ticket, gruppi, refill a tempo variabile).
-
-## 2. Architettura
+## Architettura
 
 ### Processi
 
-Ogni processo è un eseguibile distinto, lanciato con `fork()` +
-`execve()` dal responsabile mensa (o da `add_users`):
-
-- `responsabile_mensa` — crea le risorse IPC, legge il menu del giorno, crea gli
+- `responsabile_mensa`: crea le risorse IPC, legge il menu del giorno, crea gli
   operatori e gli utenti; scandisce le giornate, decide ogni mattina
   l'assegnazione operatore-stazione, rifornisce le stazioni, legge e
   stampa le statistiche, decide la terminazione e dealloca le risorse IPC;
-- `operatore` — un unico eseguibile in grado di servire una qualsiasi
+- `operatore`: un unico eseguibile in grado di servire una qualsiasi
   delle 4 stazioni (primi, secondi-contorni, dolce-caffè, cassa): quale
-  delle quattro non è fissato all'avvio, ma deciso dal responsabile ogni
+  delle quattro viene deciso dal responsabile ogni
   mattina e comunicato via memoria condivisa;
-- `utente` — un utente della mensa;
-- `add_users`, `communication_disorder` — eseguibili della
+- `utente`: un utente della mensa;
+- `add_users`, `communication_disorder`: eseguibili della
   versione completa, invocabili da linea di comando a simulazione
   avviata.
 
 ### Risorse IPC
 
-**Memoria condivisa** (2 segmenti):
+**Memoria condivisa**:
 
-- `StatoStazioni` — menu del giorno e porzioni disponibili per ciascun
+- `StatoStazioni`: menu del giorno e porzioni disponibili per ciascun
   piatto, postazioni totali/libere per stazione, operatori assegnati e
   in pausa, utenti in coda, numero di figli attesi alle barriere;
-- `Statistiche` — tutti i contatori giornalieri e cumulativi.
+- `Statistiche`: tutti i contatori giornalieri e cumulativi.
 
-**Semafori** (un unico set, `NUM_SEMAFORI` elementi):
+**Semafori**:
 
 - 5 mutex: statistiche e stato di ciascuna delle 4 stazioni;
-- 4 semafori contatori per le postazioni delle stazioni, inizializzati a
-  `NOF_WK_SEATS_*`;
-- `SEM_POSTAZIONI_TICKET` — lettori di ticket (`NOF_TICKET_READERS`);
-- `SEM_TAVOLI` — posti a sedere (`NOF_TABLE_SEATS`);
-- `SEM_GATE_START` / `SEM_BARRIERA_READY` — sincronizzazione di inizio e
-  fine giornata fra responsabile e figli;
-- `SEM_MUTEX_ATTESA` — mutex sui contatori degli utenti in coda;
-- `SEM_CASSA_ATTIVA` — flag di funzionamento dei pagamenti automatici.
+- 4 semafori contatori per le postazioni delle stazioni;
+- `SEM_POSTAZIONI_TICKET`: lettori di ticket;
+- `SEM_TAVOLI`: posti a sedere;
+- `SEM_GATE_START` / `SEM_BARRIERA_READY`: sincronizzazione di inizio e fine giornata fra responsabile e figli;
+- `SEM_MUTEX_ATTESA`: mutex sui contatori degli utenti in coda;
+- `SEM_CASSA_ATTIVA`: flag di funzionamento dei pagamenti automatici.
 
-**Code di messaggi** (6): una per ciascuna delle 4 stazioni, una per la
+**Code di messaggi**: una per ciascuna delle 4 stazioni, una per la
 comunicazione fra membri di un gruppo e capogruppo, e una per le
-richieste di `./bin/add_users` al responsabile (versione completa, vedi
-più sotto). Su ogni coda di stazione le richieste viaggiano con
+richieste di `./bin/add_users` al responsabile. Su ogni coda di stazione le richieste viaggiano con
 `mtype = MSG_RICHIESTA` (letto dall'operatore assegnato quel giorno) e le
 risposte con `mtype = pid` del destinatario: un solo oggetto IPC realizza
 quindi sia la coda di attesa sia il canale di risposta punto-punto.
@@ -66,7 +54,7 @@ sono in secondi simulati e vengono convertiti da `simtime.c`, così i
 tempi di servizio, le pause, il consumo del pasto, il refill e la durata
 del guasto restano confrontabili fra loro e con la durata della giornata.
 
-## 3. Scelte progettuali
+## Scelte progettuali
 
 ### Assegnazione operatore-stazione
 
@@ -86,7 +74,7 @@ zero ogni mattina.
 La scrittura di `stazione_operatore_oggi[]` avviene interamente prima
 della `signal` su `SEM_GATE_START`: le operazioni sui semafori fanno da
 barriera di memoria, quindi ogni operatore, appena si risveglia dal
-cancello, vede in modo sicuro l'assegnazione di quella giornata senza
+cancello, vede l'assegnazione di quella giornata senza
 bisogno di un mutex dedicato. L'operatore stesso non sa in anticipo quale
 stazione servirà: apre tutte e 4 le code di messaggi all'avvio e sceglie
 quale usare solo dopo aver letto la propria voce dell'array, ogni
@@ -99,26 +87,20 @@ può decidere con probabilità `PAUSE_PROBABILITY` di mettersi in pausa,
 al più `NOF_PAUSE` volte al giorno. La pausa è concessa solo se, sotto
 mutex della stazione, risulta occupata più di una postazione: così la
 stazione non resta mai sguarnita. L'operatore rilascia allora la
-postazione (semaforo + contatore in memoria condivisa), aggiorna le
+postazione, aggiorna le
 statistiche, dorme e infine ricompete per una postazione.
 
 Un operatore che non trova postazioni libere resta in attesa passiva sul
 semaforo delle postazioni: si sveglierà quando un collega andrà in pausa
-o quando la giornata finirà (l'attesa è interrompibile dal segnale, vedi
-`sem_wait_idx_intr()`, altrimenti non potrebbe raggiungere la barriera di
-fine giornata).
+o quando la giornata finirà.
 
 ### Utenti con e senza ticket
 
-Il tipo di utente è deciso una sola volta alla creazione del processo:
-con probabilità `TICKET_PERCENTAGE` (80%) l'utente è "w ticket". La
+Il tipo di utente è deciso una sola volta alla creazione del processo. La
 **fila per la lettura del ticket** è modellata come una stazione di
-servizio con `NOF_TICKET_READERS` postazioni, rappresentate dal semaforo
-contatore `SEM_POSTAZIONI_TICKET`: l'utente con ticket vi si accoda in
-attesa passiva prima di entrare nella mensa, impiega
-`AVG_SRVC_TICKET ± 20%` e solo dopo si dirige alle stazioni. Lo sconto
-`TICKET_DISCOUNT_PCT` viene applicato dal cassiere sull'importo del
-singolo utente; il tempo di attesa alla lettura del ticket e l'importo
+servizio: l'utente con ticket vi si accoda in
+attesa passiva prima di entrare nella mensa. 
+Il tempo di attesa alla lettura del ticket e l'importo
 complessivo degli sconti sono contabilizzati separatamente nelle
 statistiche e nel CSV.
 
@@ -133,15 +115,14 @@ passando loro il pid del capogruppo: l'associazione utenti-gruppo è
 quindi determinata alla creazione dei processi.
 
 Ogni membro, terminato il giro delle stazioni, invia il proprio ordine
-al capogruppo sulla coda dei gruppi (`mtype` = pid del capogruppo) e
-attende. Il capogruppo raccoglie esattamente `num_membri - 1` ordini,
-compone un'unica `MsgRichiestaCassa` e la invia alla cassa; il cassiere
+al capogruppo sulla coda dei gruppi e attende. 
+Il capogruppo compone un'unica `MsgRichiestaCassa` e la invia alla cassa; il cassiere
 calcola l'importo di ciascun membro e risponde singolarmente a ognuno.
 Solo allora i membri si siedono a mangiare: il pagamento avviene quindi
-dopo che *tutti* si sono riforniti.
+dopo che tutti si sono riforniti.
 
-Per garantire che la raccolta termini sempre, **ogni membro invia il
-proprio messaggio anche quando non pranza** (campo `partecipa = 0`):
+Per garantire che la raccolta termini sempre, ogni membro invia il
+proprio messaggio anche quando non pranza (campo `partecipa = 0`):
 il capogruppo sa così sempre quanti messaggi attendere e non può
 restare bloccato indefinitamente.
 
@@ -149,26 +130,22 @@ restare bloccato indefinitamente.
 
 L'utente compone il menu secondo le probabilità di configurazione
 (garantendo almeno un piatto principale), poi, fra le stazioni che deve
-ancora visitare, sceglie ogni volta quella con la coda più corta,
-misurata leggendo `msg_qnum` con `msgctl(IPC_STAT)`. La valutazione è
-ripetuta dopo ogni piatto ottenuto.
+ancora visitare, sceglie ogni volta quella con la coda più corta. 
+La valutazione è ripetuta dopo ogni piatto ottenuto.
 
 Se al momento del servizio il piatto scelto è esaurito, l'operatore ne
-sostituisce automaticamente un altro dello stesso tipo
-(`ESITO_SOSTITUITO`); se sono finiti tutti i piatti di quel tipo
-(`ESITO_TIPO_ESAURITO`) l'utente ripiega sull'altro tipo di piatto
+sostituisce automaticamente un altro dello stesso tipo; 
+se sono finiti tutti i piatti di quel tipo l'utente ripiega sull'altro tipo di piatto
 principale, e se anche quello è esaurito desiste ed esce senza passare
 in cassa. Dolce e caffè si prendono per ultimi e in un'unica visita alla
 stazione coffee, che ha scorte illimitate.
 
 ### Refill delle porzioni 
 
-Le stazioni primi e secondi sono inizializzate ogni mattina con
-`AVG_REFILL_PRIMI` / `AVG_REFILL_SECONDI` porzioni per ciascun tipo di
-piatto. Il responsabile fa avanzare la giornata a blocchi di 10 minuti
-simulati e ad ogni blocco valuta il rifornimento, che avviene ogni
-`AVG_REFILL_TIME ± REFILL_VARIABILITY_PERCENT%` fino al massimo di
-`MAX_PORZIONI_*`. Le porzioni rimaste a fine giornata sono conteggiate
+Le stazioni primi e secondi sono inizializzate ogni mattina. 
+Il responsabile fa avanzare la giornata a blocchi di 10 minuti
+simulati e ad ogni blocco valuta il rifornimento. 
+Le porzioni rimaste a fine giornata sono conteggiate
 come "piatti avanzati".
 
 ### Communication disorder
@@ -183,34 +160,18 @@ ad accodarsi alla cassa.
 
 ### Aggiunta dinamica di utenti
 
-`add_users` **non crea processi direttamente**: invia una richiesta
-(`MsgRichiestaAddUsers`, numero di utenti) su una coda di messaggi
+`add_users` non crea processi direttamente, invia una richiesta su una coda di messaggi
 dedicata ed esce. È il responsabile, che la controlla in modo non
 bloccante ad ogni blocco di 10 minuti simulati, a fare `fork()`+`execve()`
 dei nuovi utenti e a incrementare sotto mutex il contatore dei figli
 attesi in memoria condivisa.
-
-Se fosse `add_users` a creare i
-processi, il figlio dovrebbe unirsi al
-process group del responsabile con `setpgid()` per poter ricevere
-`SIGUSR1`/`SIGTERM` via `killpg()`. Ma `setpgid()` può unire un processo
-solo a un process group della **propria stessa sessione**: lanciando
-`add_users` da un terminale diverso da quello del responsabile 
-la chiamata fallisce con `EPERM`, i nuovi
-utenti restano nel process group della shell che li ha creati, non
-ricevono mai i segnali di fine giornata e il responsabile resta bloccato
-per sempre alla barriera successiva. Facendo forkare i nuovi utenti
-al responsabile stesso, questi ereditano automaticamente il suo process
-group (comportamento normale di `fork()`) e vengono anche
-correttamente attesi da `waitpid()` a fine simulazione, senza alcuna
-dipendenza dalla sessione del terminale da cui `add_users` viene invocato.
 
 Il segnale che il nuovo utente emette su `SEM_BARRIERA_READY` al termine
 della propria inizializzazione vale come presenza alla barriera della
 giornata in corso; dal giorno successivo si allinea al normale ciclo di
 `SEM_GATE_START`.
 
-## 4. Sincronizzazione delle giornate e terminazione
+## Sincronizzazione delle giornate e terminazione
 
 All'avvio il responsabile attende su `SEM_BARRIERA_READY` un segnale da
 ciascuno dei figli: la simulazione comincia solo quando tutti hanno
@@ -219,29 +180,21 @@ completato l'inizializzazione. Ogni mattina il responsabile esegue
 figlio ne consuma una e lavora fino a fine giornata.
 
 Alla chiusura il responsabile invia `SIGUSR1` a tutto il process group e
-attende di nuovo una `signal` per figlio. I segnali sono installati
-**senza** `SA_RESTART`, così ogni `msgrcv()`/`semop()` bloccante ritorna
-con `EINTR` e il processo può abbandonare la coda: gli utenti ancora in
-fila rinunciano al pasto e vengono contati fra i non serviti. Gli utenti
-che hanno finito prima attendono la chiusura con `sigsuspend()` sotto
-maschera, evitando la corsa fra il test del flag e la sospensione.
+attende di nuovo una `signal` per figlio.
 
 Poiché a barriera raggiunta nessun figlio sta lavorando, il responsabile
 può leggere lo stato delle stazioni per contare i piatti avanzati e
 svuotare le code di messaggi, così che ogni giornata inizi pulita.
 
-**Drain di fine giornata.** Un operatore (o il cassiere) smette di
+Un operatore (o il cassiere) smette di
 leggere dalla propria coda non appena nota il flag di fine giornata,
 all'inizio dell'iterazione successiva del proprio ciclo di servizio. Se
-ci sono ancora richieste accodate in quel momento — condizione tutt'altro
-che rara quando la domanda eccede la capacità di servizio, come nella
-configurazione di overload — gli utenti che le hanno inviate restano
-bloccati in un `msgrcv()` che attende proprio quella risposta
-(instradata per `mtype` sul loro pid): nessun altro processo può mai
+ci sono ancora richieste accodate in quel momento, gli utenti che le hanno inviate restano
+bloccati in un `msgrcv()` che attende proprio quella risposta: nessun altro processo può mai
 rispondergli, quindi resterebbero in attesa per sempre e il responsabile
 non raggiungerebbe mai la barriera. Per questo, prima di rilasciare la
 postazione, operatore e cassiere svuotano la propria coda in modo non
-bloccante (`IPC_NOWAIT`) rispondendo con un esito di "non riuscito"
+bloccante rispondendo con un esito di "non riuscito"
 (`ESITO_TIPO_ESAURITO` per i piatti, `totale_pagato = -1` per la cassa)
 a chiunque sia rimasto in sospeso: quegli utenti rinunciano al piatto o
 al pasto esattamente come chi trova la coda già chiusa, e vengono

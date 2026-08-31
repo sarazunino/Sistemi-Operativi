@@ -30,15 +30,15 @@ static void carica_menu(const char *path, const Config *cfg, StatoStazioni *stat
         exit(EXIT_FAILURE);
     }
 
-    StatoStazionePrimi   *primi   = &stato->primi;
+    StatoStazionePrimi *primi = &stato->primi;
     StatoStazioneSecondi *secondi = &stato->secondi;
-    StatoStazioneCoffee  *coffee  = &stato->coffee;
+    StatoStazioneCoffee *coffee = &stato->coffee;
 
-    primi->num_piatti_oggi   = 0;
+    primi->num_piatti_oggi = 0;
     secondi->num_piatti_oggi = 0;
-    secondi->num_contorni    = 0;
-    coffee->num_caffe        = 0;
-    coffee->num_dolci        = 0;
+    secondi->num_contorni = 0;
+    coffee->num_caffe = 0;
+    coffee->num_dolci = 0;
 
     char riga[128];
     while (fgets(riga, sizeof(riga), f)) {
@@ -157,8 +157,8 @@ static pid_t avvia_utente(const char *config_path, int capogruppo, int num_membr
     if (pid == 0) {
         char s_capo[8], s_num[8], s_pid[16];
         snprintf(s_capo, sizeof(s_capo), "%d", capogruppo);
-        snprintf(s_num,  sizeof(s_num),  "%d", num_membri);
-        snprintf(s_pid,  sizeof(s_pid),  "%d", (int)capo_pid);
+        snprintf(s_num, sizeof(s_num), "%d", num_membri);
+        snprintf(s_pid, sizeof(s_pid), "%d", (int)capo_pid);
 
         char *args[] = { (char *)"./bin/utente", (char *)config_path, s_capo, s_num, s_pid, NULL };
         execve("./bin/utente", args, environ);
@@ -337,15 +337,15 @@ int main(int argc, char *argv[]) {
 
     ipc_register_cleanup_on_signal();
 
-    int shm_st_id    = shm_stazioni_get(1);
+    int shm_st_id = shm_stazioni_get(1);
     int shm_stats_id = shm_stats_get(1);
-    int semid        = sem_set_get(1);
-    int mq_primi     = msgq_primi_get(1);
-    int mq_secondi   = msgq_secondi_get(1);
-    int mq_coffee    = msgq_coffee_get(1);
-    int mq_cassa     = msgq_cassa_get(1);
-    int mq_gruppo    = msgq_gruppo_get(1);
-    int mq_addusers  = msgq_addusers_get(1);
+    int semid = sem_set_get(1);
+    int mq_primi = msgq_primi_get(1);
+    int mq_secondi = msgq_secondi_get(1);
+    int mq_coffee = msgq_coffee_get(1);
+    int mq_cassa = msgq_cassa_get(1);
+    int mq_gruppo = msgq_gruppo_get(1);
+    int mq_addusers = msgq_addusers_get(1);
 
     ipc_track_for_cleanup(shm_st_id, shm_stats_id, semid, mq_primi, mq_secondi, mq_coffee, mq_cassa, mq_gruppo, mq_addusers);
 
@@ -356,10 +356,10 @@ int main(int argc, char *argv[]) {
 
     carica_menu(cfg.menu_file_path, &cfg, stato);
 
-    stato->postazioni_totali[STAZIONE_PRIMI]   = cfg.nof_wk_seats_primi;
+    stato->postazioni_totali[STAZIONE_PRIMI] = cfg.nof_wk_seats_primi;
     stato->postazioni_totali[STAZIONE_SECONDI] = cfg.nof_wk_seats_secondi;
-    stato->postazioni_totali[STAZIONE_COFFEE]  = cfg.nof_wk_seats_coffee;
-    stato->postazioni_totali[STAZIONE_CASSA]   = cfg.nof_wk_seats_cassa;
+    stato->postazioni_totali[STAZIONE_COFFEE] = cfg.nof_wk_seats_coffee;
+    stato->postazioni_totali[STAZIONE_CASSA] = cfg.nof_wk_seats_cassa;
 
     for (int i = 0; i < NUM_STAZIONI; i++)
         stato->postazioni_libere[i] = stato->postazioni_totali[i];

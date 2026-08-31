@@ -109,9 +109,9 @@ typedef struct {
 } StatoStazioneCoffee;
 
 typedef struct {
-    StatoStazionePrimi        primi;
-    StatoStazioneSecondi      secondi;
-    StatoStazioneCoffee       coffee;
+    StatoStazionePrimi primi;
+    StatoStazioneSecondi secondi;
+    StatoStazioneCoffee coffee;
 
     int postazioni_libere[NUM_STAZIONI];
     int postazioni_totali[NUM_STAZIONI];
@@ -141,9 +141,9 @@ typedef struct {
     long piatti_avanzati_tot[NUM_TIPI_PIATTO];
 
     double somma_attesa_oggi[NUM_STAZIONI];
-    long   conteggio_attesa_oggi[NUM_STAZIONI];
+    long conteggio_attesa_oggi[NUM_STAZIONI];
     double somma_attesa_tot[NUM_STAZIONI];
-    long   conteggio_attesa_tot[NUM_STAZIONI];
+    long conteggio_attesa_tot[NUM_STAZIONI];
 
     int  operatori_attivi_oggi;
     int  operatori_attivi_tot;
@@ -169,14 +169,14 @@ typedef struct {
     long sconto_ticket_tot;
 
     double somma_attesa_ticket_oggi;
-    long   conteggio_attesa_ticket_oggi;
+    long conteggio_attesa_ticket_oggi;
     double somma_attesa_ticket_tot;
-    long   conteggio_attesa_ticket_tot;
+    long conteggio_attesa_ticket_tot;
 
     double somma_attesa_complessiva_oggi;
-    long   conteggio_attesa_complessivo_oggi;
+    long conteggio_attesa_complessivo_oggi;
     double somma_attesa_complessiva_tot;
-    long   conteggio_attesa_complessivo_tot;
+    long conteggio_attesa_complessivo_tot;
 
     int giorno_corrente;
     int motivo_terminazione;
@@ -187,21 +187,21 @@ typedef struct {
 #define MSG_RICHIESTA 1L
 
 typedef struct {
-    long   mtype; /* sempre MSG_RICHIESTA */
-    pid_t  utente_pid; /* mtype con cui l'operatore risponde */
-    int    tipo_piatto;
-    int    scelta_idx;    
-    int    contorno_idx;  
-    int    tipo_caffe;    
-    int    dolce_idx;
+    long mtype; /* sempre MSG_RICHIESTA */
+    pid_t utente_pid; /* mtype con cui l'operatore risponde */
+    int tipo_piatto;
+    int scelta_idx;    
+    int contorno_idx;  
+    int tipo_caffe;    
+    int dolce_idx;
 } MsgRichiestaCibo;
 
 typedef struct {
     long mtype; /* pid dell'utente destinatario */
-    int  esito;           
-    int  piatto_idx;      
-    int  contorno_idx;   
-    int  prezzo;          
+    int esito;           
+    int piatto_idx;      
+    int contorno_idx;   
+    int prezzo;          
 } MsgRispostaCibo;
 
 /* Messaggi per la coda cassa */
@@ -209,45 +209,45 @@ typedef struct {
 /* Richiesta di pagamento è sempre inviata dal capogruppo. Un utente
  * singolo e' un gruppo di un solo membro. */
 typedef struct {
-    long   mtype; /* sempre MSG_RICHIESTA */
-    pid_t  richiedente_pid; /* pid del capogruppo */
-    int    num_membri;
-    pid_t  membri_pid[MAX_GRUPPO];
-    int    ha_ticket[MAX_GRUPPO];
-    int    ha_primo[MAX_GRUPPO];
-    int    primo_idx[MAX_GRUPPO];
-    int    ha_secondo[MAX_GRUPPO];
-    int    secondo_idx[MAX_GRUPPO];
-    int    contorno_idx[MAX_GRUPPO];
-    int    ha_dolce[MAX_GRUPPO];
-    int    dolce_idx[MAX_GRUPPO];
-    int    ha_caffe[MAX_GRUPPO];
-    int    tipo_caffe[MAX_GRUPPO];
+    long mtype; /* sempre MSG_RICHIESTA */
+    pid_t richiedente_pid; /* pid del capogruppo */
+    int num_membri;
+    pid_t membri_pid[MAX_GRUPPO];
+    int ha_ticket[MAX_GRUPPO];
+    int ha_primo[MAX_GRUPPO];
+    int primo_idx[MAX_GRUPPO];
+    int ha_secondo[MAX_GRUPPO];
+    int secondo_idx[MAX_GRUPPO];
+    int contorno_idx[MAX_GRUPPO];
+    int ha_dolce[MAX_GRUPPO];
+    int dolce_idx[MAX_GRUPPO];
+    int ha_caffe[MAX_GRUPPO];
+    int tipo_caffe[MAX_GRUPPO];
 } MsgRichiestaCassa;
 
 /* Il cassiere risponde singolarmente a ciascun membro del gruppo. */
 typedef struct {
     long mtype; /* pid del membro */
-    int  totale_pagato;     
-    int  sconto_applicato;  
+    int totale_pagato;     
+    int sconto_applicato;  
 } MsgRispostaCassa;
 
 /* Messaggio: membro di un gruppo -> capogruppo */
 
 typedef struct {
-    long  mtype; /* pid del capogruppo */
+    long mtype; /* pid del capogruppo */
     pid_t membro_pid;
-    int   partecipa; /* 0 = non pranza oggi */
-    int   ha_ticket;
-    int   ha_primo;
-    int   primo_idx;
-    int   ha_secondo;
-    int   secondo_idx;
-    int   contorno_idx;
-    int   ha_dolce;
-    int   dolce_idx;
-    int   ha_caffe;
-    int   tipo_caffe;
+    int partecipa; /* 0 = non pranza oggi */
+    int ha_ticket;
+    int ha_primo;
+    int primo_idx;
+    int ha_secondo;
+    int secondo_idx;
+    int contorno_idx;
+    int ha_dolce;
+    int dolce_idx;
+    int ha_caffe;
+    int tipo_caffe;
 } MsgOrdineGruppo;
 
 /* Messaggio: richiesta di aggiunta utenti */
@@ -256,7 +256,7 @@ typedef struct {
 
 typedef struct {
     long mtype; /* sempre MSG_ADDUSERS_RICHIESTA */
-    int  n_utenti;
+    int n_utenti;
 } MsgRichiestaAddUsers;
 
 /* Semafori */
@@ -284,10 +284,10 @@ typedef enum {
 
 static inline const char *nome_stazione(TipoStazione s) {
     switch (s) {
-        case STAZIONE_PRIMI:   return "PRIMI";
+        case STAZIONE_PRIMI: return "PRIMI";
         case STAZIONE_SECONDI: return "SECONDI";
-        case STAZIONE_COFFEE:  return "COFFEE";
-        case STAZIONE_CASSA:   return "CASSA";
+        case STAZIONE_COFFEE: return "COFFEE";
+        case STAZIONE_CASSA: return "CASSA";
         default:               return "?";
     }
 }

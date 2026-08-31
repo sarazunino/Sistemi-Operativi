@@ -24,8 +24,7 @@ int main(int argc, char *argv[]) {
 
     int semid = sem_set_get(0);
 
-    printf("[COMMUNICATION_DISORDER] Guasto ai pagamenti automatici: "
-           "cassa bloccata per %d secondi simulati.\n", durata);
+    printf("[COMMUNICATION_DISORDER] Guasto ai pagamenti automatici: cassa bloccata per %d secondi simulati.\n", durata);
     fflush(stdout);
 
     sem_wait_idx(semid, SEM_CASSA_ATTIVA);

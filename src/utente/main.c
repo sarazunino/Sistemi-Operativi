@@ -15,10 +15,10 @@
 
 /* Flag di controllo */
 
-static volatile sig_atomic_t giorno_finito      = 0; /* SIGUSR1 */
+static volatile sig_atomic_t giorno_finito = 0; /* SIGUSR1 */
 static volatile sig_atomic_t simulazione_finita = 0; /* SIGTERM */
 
-static void handler_fine_giorno(int signo)      { (void)signo; giorno_finito = 1; }
+static void handler_fine_giorno(int signo) { (void)signo; giorno_finito = 1; }
 static void handler_fine_simulazione(int signo) { (void)signo; simulazione_finita = 1; }
 
 static int devo_fermarmi(void) { return giorno_finito || simulazione_finita; }
@@ -27,12 +27,12 @@ static int devo_fermarmi(void) { return giorno_finito || simulazione_finita; }
 
 typedef struct {
     const Config  *cfg;
-    int            semid;
+    int semid;
     StatoStazioni *stato;
-    Statistiche   *stats;
-    int            mq[NUM_STAZIONI];   /* code delle 4 stazioni */
-    int            mq_gruppo;
-    int            ha_ticket;
+    Statistiche *stats;
+    int mq[NUM_STAZIONI];   /* code delle 4 stazioni */
+    int mq_gruppo;
+    int ha_ticket;
 } Ctx;
 
 /* Menu scelto e piatti effettivamente ottenuti nella giornata. */
@@ -91,13 +91,13 @@ static void componi_menu(const Ctx *c, Ordine *o) {
     memset(o, 0, sizeof(*o));
     o->primo_idx = o->secondo_idx = o->contorno_idx = o->dolce_idx = o->tipo_caffe = -1;
 
-    int n_primi    = c->stato->primi.num_piatti_oggi;
-    int n_secondi  = c->stato->secondi.num_piatti_oggi;
+    int n_primi = c->stato->primi.num_piatti_oggi;
+    int n_secondi = c->stato->secondi.num_piatti_oggi;
     int n_contorni = c->stato->secondi.num_contorni;
-    int n_dolci    = c->stato->coffee.num_dolci;
-    int n_caffe    = c->stato->coffee.num_caffe;
+    int n_dolci = c->stato->coffee.num_dolci;
+    int n_caffe = c->stato->coffee.num_caffe;
 
-    o->vuole_primo   = (n_primi   > 0) && (sim_rand_range(0, 99) < c->cfg->prob_primo);
+    o->vuole_primo = (n_primi > 0) && (sim_rand_range(0, 99) < c->cfg->prob_primo);
     o->vuole_secondo = (n_secondi > 0) && (sim_rand_range(0, 99) < c->cfg->prob_secondo_contorno);
 
     if (!o->vuole_primo && !o->vuole_secondo) {
@@ -105,14 +105,14 @@ static void componi_menu(const Ctx *c, Ordine *o) {
         else if (n_secondi > 0) o->vuole_secondo = 1;
     }
 
-    if (o->vuole_primo)   o->primo_idx   = sim_rand_range(0, n_primi - 1);
+    if (o->vuole_primo) o->primo_idx = sim_rand_range(0, n_primi - 1);
     if (o->vuole_secondo) o->secondo_idx = sim_rand_range(0, n_secondi - 1);
     if (o->vuole_secondo && n_contorni > 0) o->contorno_idx = sim_rand_range(0, n_contorni - 1);
 
     o->vuole_dolce = (n_dolci > 0) && (sim_rand_range(0, 99) < c->cfg->prob_dolce);
     o->vuole_caffe = (n_caffe > 0) && (sim_rand_range(0, 99) < c->cfg->prob_caffe);
 
-    if (o->vuole_dolce) o->dolce_idx  = sim_rand_range(0, n_dolci - 1);
+    if (o->vuole_dolce) o->dolce_idx = sim_rand_range(0, n_dolci - 1);
     if (o->vuole_caffe) o->tipo_caffe = sim_rand_range(0, n_caffe - 1);
 }
 
@@ -121,27 +121,27 @@ static void componi_menu(const Ctx *c, Ordine *o) {
 static int visita_stazione(const Ctx *c, TipoStazione staz, Ordine *o) {
     MsgRichiestaCibo req;
     memset(&req, 0, sizeof(req));
-    req.mtype        = MSG_RICHIESTA;
-    req.utente_pid   = getpid();
+    req.mtype = MSG_RICHIESTA;
+    req.utente_pid = getpid();
     req.contorno_idx = -1;
-    req.dolce_idx    = -1;
-    req.tipo_caffe   = -1;
+    req.dolce_idx = -1;
+    req.tipo_caffe = -1;
 
     switch (staz) {
         case STAZIONE_PRIMI:
             req.tipo_piatto = TIPO_PRIMO;
-            req.scelta_idx  = o->primo_idx;
+            req.scelta_idx = o->primo_idx;
             break;
         case STAZIONE_SECONDI:
-            req.tipo_piatto  = TIPO_SECONDO;
-            req.scelta_idx   = o->secondo_idx;
+            req.tipo_piatto = TIPO_SECONDO;
+            req.scelta_idx = o->secondo_idx;
             req.contorno_idx = o->contorno_idx;
             break;
         default:
             req.tipo_piatto = TIPO_DOLCE;
-            req.scelta_idx  = -1;
-            req.dolce_idx   = o->vuole_dolce ? o->dolce_idx  : -1;
-            req.tipo_caffe  = o->vuole_caffe ? o->tipo_caffe : -1;
+            req.scelta_idx = -1;
+            req.dolce_idx = o->vuole_dolce ? o->dolce_idx  : -1;
+            req.tipo_caffe = o->vuole_caffe ? o->tipo_caffe : -1;
             break;
     }
 
@@ -234,31 +234,31 @@ static void giro_stazioni(const Ctx *c, Ordine *o) {
 /* Pagamento */
 
 static void ordine_in_messaggio(const Ordine *o, int ha_ticket, MsgOrdineGruppo *m) {
-    m->partecipa    = (o->ha_primo || o->ha_secondo);
-    m->ha_ticket    = ha_ticket;
-    m->ha_primo     = o->ha_primo;
-    m->primo_idx    = o->primo_idx;
-    m->ha_secondo   = o->ha_secondo;
-    m->secondo_idx  = o->secondo_idx;
+    m->partecipa = (o->ha_primo || o->ha_secondo);
+    m->ha_ticket = ha_ticket;
+    m->ha_primo = o->ha_primo;
+    m->primo_idx = o->primo_idx;
+    m->ha_secondo = o->ha_secondo;
+    m->secondo_idx = o->secondo_idx;
     m->contorno_idx = o->contorno_idx;
-    m->ha_dolce     = o->vuole_dolce;
-    m->dolce_idx    = o->dolce_idx;
-    m->ha_caffe     = o->vuole_caffe;
-    m->tipo_caffe   = o->tipo_caffe;
+    m->ha_dolce = o->vuole_dolce;
+    m->dolce_idx = o->dolce_idx;
+    m->ha_caffe = o->vuole_caffe;
+    m->tipo_caffe = o->tipo_caffe;
 }
 
 static void aggiungi_a_richiesta(MsgRichiestaCassa *req, int i, pid_t pid, int ha_ticket, const MsgOrdineGruppo *m) {
-    req->membri_pid[i]  = pid;
-    req->ha_ticket[i]   = ha_ticket;
-    req->ha_primo[i]    = m->ha_primo;
-    req->primo_idx[i]   = m->primo_idx;
-    req->ha_secondo[i]  = m->ha_secondo;
+    req->membri_pid[i] = pid;
+    req->ha_ticket[i] = ha_ticket;
+    req->ha_primo[i] = m->ha_primo;
+    req->primo_idx[i] = m->primo_idx;
+    req->ha_secondo[i] = m->ha_secondo;
     req->secondo_idx[i] = m->secondo_idx;
-    req->contorno_idx[i]= m->contorno_idx;
-    req->ha_dolce[i]    = m->ha_dolce;
-    req->dolce_idx[i]   = m->dolce_idx;
-    req->ha_caffe[i]    = m->ha_caffe;
-    req->tipo_caffe[i]  = m->tipo_caffe;
+    req->contorno_idx[i] = m->contorno_idx;
+    req->ha_dolce[i] = m->ha_dolce;
+    req->dolce_idx[i] = m->dolce_idx;
+    req->ha_caffe[i] = m->ha_caffe;
+    req->tipo_caffe[i] = m->tipo_caffe;
 }
 
 /* Attende la propria ricevuta dalla cassa. Ritorna 1 se il pagamento e' andato a buon fine. */
@@ -287,7 +287,7 @@ static int attendi_ricevuta(const Ctx *c) {
 static int paga_come_membro(const Ctx *c, const Ordine *o, pid_t capo_pid) {
     MsgOrdineGruppo m;
     memset(&m, 0, sizeof(m));
-    m.mtype      = (long)capo_pid;
+    m.mtype = (long)capo_pid;
     m.membro_pid = getpid();
     ordine_in_messaggio(o, c->ha_ticket, &m);
 
@@ -305,7 +305,7 @@ static int paga_come_membro(const Ctx *c, const Ordine *o, pid_t capo_pid) {
 static int paga_come_capogruppo(const Ctx *c, const Ordine *o, int num_membri) {
     MsgRichiestaCassa req;
     memset(&req, 0, sizeof(req));
-    req.mtype           = MSG_RICHIESTA;
+    req.mtype = MSG_RICHIESTA;
     req.richiedente_pid = getpid();
 
     MsgOrdineGruppo mio;
@@ -429,9 +429,9 @@ int main(int argc, char *argv[]) {
     const char *config_path = argv[1];
     int   capogruppo = atoi(argv[2]);
     int   num_membri = atoi(argv[3]);
-    pid_t capo_pid   = (pid_t)atoi(argv[4]);
+    pid_t capo_pid = (pid_t)atoi(argv[4]);
 
-    if (num_membri < 1)          num_membri = 1;
+    if (num_membri < 1) num_membri = 1;
     if (num_membri > MAX_GRUPPO) num_membri = MAX_GRUPPO;
     if (capogruppo) capo_pid = getpid();
 
@@ -456,11 +456,11 @@ int main(int argc, char *argv[]) {
     c.semid = sem_set_get(0);
     c.stato = shm_stazioni_attach(shm_stazioni_get(0));
     c.stats = shm_stats_attach(shm_stats_get(0));
-    c.mq[STAZIONE_PRIMI]   = msgq_primi_get(0);
+    c.mq[STAZIONE_PRIMI] = msgq_primi_get(0);
     c.mq[STAZIONE_SECONDI] = msgq_secondi_get(0);
-    c.mq[STAZIONE_COFFEE]  = msgq_coffee_get(0);
-    c.mq[STAZIONE_CASSA]   = msgq_cassa_get(0);
-    c.mq_gruppo            = msgq_gruppo_get(0);
+    c.mq[STAZIONE_COFFEE] = msgq_coffee_get(0);
+    c.mq[STAZIONE_CASSA] = msgq_cassa_get(0);
+    c.mq_gruppo = msgq_gruppo_get(0);
 
     c.ha_ticket = sim_rand_range(0, 99) < cfg.ticket_percentage;
 

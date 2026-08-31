@@ -183,12 +183,12 @@ void stats_record_ticket(Statistiche *stats, int semid, bool ha_ticket, long sco
 
 static const char *nome_piatto(TipoPiatto tipo) {
     switch (tipo) {
-        case TIPO_PRIMO:    return "primo";
-        case TIPO_SECONDO:  return "secondo";
+        case TIPO_PRIMO: return "primo";
+        case TIPO_SECONDO: return "secondo";
         case TIPO_CONTORNO: return "contorno";
-        case TIPO_DOLCE:    return "dolce";
-        case TIPO_CAFFE:    return "caffe'";
-        default:            return "?";
+        case TIPO_DOLCE: return "dolce";
+        case TIPO_CAFFE: return "caffe'";
+        default: return "?";
     }
 }
 
@@ -264,11 +264,11 @@ void stats_print_total(const Statistiche *stats) {
                stats->piatti_distribuiti_tot[i], (double)stats->piatti_distribuiti_tot[i] / giorni,
                stats->piatti_avanzati_tot[i],    (double)stats->piatti_avanzati_tot[i] / giorni);
         distribuiti_tot += stats->piatti_distribuiti_tot[i];
-        avanzati_tot    += stats->piatti_avanzati_tot[i];
+        avanzati_tot += stats->piatti_avanzati_tot[i];
     }
     printf("  - TOTALE  : distribuiti=%-6ld (%.2f/g)  avanzati=%-6ld (%.2f/g)\n",
            distribuiti_tot, (double)distribuiti_tot / giorni,
-           avanzati_tot,    (double)avanzati_tot / giorni);
+           avanzati_tot, (double)avanzati_tot / giorni);
 
     printf("Tempo medio di attesa sulla simulazione (complessivo): %.2f\n",
            media(stats->somma_attesa_complessiva_tot, stats->conteggio_attesa_complessivo_tot));
@@ -343,7 +343,7 @@ void stats_export_to_csv(const Statistiche *stats, const char *filepath, int gio
     long distribuiti_tot = 0, avanzati_tot = 0;
     for (int i = 0; i < NUM_TIPI_PIATTO; i++) {
         distribuiti_tot += stats->piatti_distribuiti_tot[i];
-        avanzati_tot    += stats->piatti_avanzati_tot[i];
+        avanzati_tot += stats->piatti_avanzati_tot[i];
     }
     fprintf(f, "%ld,%ld,%ld,%ld,%d,%ld,%.2f\n", stats->utenti_serviti_tot, stats->utenti_non_serviti_tot, distribuiti_tot, avanzati_tot,
             stats->operatori_attivi_tot, stats->pause_tot, (double)stats->ricavo_tot / 100.0);

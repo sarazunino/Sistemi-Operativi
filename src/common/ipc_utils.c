@@ -244,11 +244,11 @@ long msgq_num_messaggi(int msgid) {
 
 int msgq_svuota(int msgid) {
     union {
-        MsgRichiestaCibo  richiesta_cibo;
-        MsgRispostaCibo   risposta_cibo;
+        MsgRichiestaCibo richiesta_cibo;
+        MsgRispostaCibo risposta_cibo;
         MsgRichiestaCassa richiesta_cassa;
-        MsgRispostaCassa  risposta_cassa;
-        MsgOrdineGruppo   ordine;
+        MsgRispostaCassa risposta_cassa;
+        MsgOrdineGruppo ordine;
     } buf;
 
     int scartati = 0;
@@ -283,14 +283,14 @@ void ipc_cleanup_all(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_
 
 void ipc_track_for_cleanup(int shm_stazioni_id, int shm_stats_id, int semid, int msgq_primi, int msgq_secondi, int msgq_coffee, int msgq_cassa, int msgq_gruppo, int msgq_addusers) {
     g_shm_stazioni_id = shm_stazioni_id;
-    g_shm_stats_id    = shm_stats_id;
+    g_shm_stats_id = shm_stats_id;
     g_semid = semid;
-    g_msgq_primi     = msgq_primi;
-    g_msgq_secondi   = msgq_secondi;
-    g_msgq_coffee    = msgq_coffee;
-    g_msgq_cassa     = msgq_cassa;
-    g_msgq_gruppo    = msgq_gruppo;
-    g_msgq_addusers  = msgq_addusers;
+    g_msgq_primi = msgq_primi;
+    g_msgq_secondi = msgq_secondi;
+    g_msgq_coffee = msgq_coffee;
+    g_msgq_cassa = msgq_cassa;
+    g_msgq_gruppo = msgq_gruppo;
+    g_msgq_addusers = msgq_addusers;
 }
 
 static void cleanup_signal_handler(int signo) {
