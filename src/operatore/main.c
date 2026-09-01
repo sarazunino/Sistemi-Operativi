@@ -54,10 +54,23 @@ static int acquisisci_postazione(int semid, StatoStazioni *stato, TipoStazione t
     return 1;
 }
 
-static void rilascia_postazione(int semid, StatoStazioni *stato, TipoStazione tipo) {
+static void rilascia_postazione(int semid, StatoStazioni *stato, Statistiche *stats, TipoStazione tipo) {
     int mutex = sem_mutex_stato_di(tipo);
     sem_wait_idx(semid, mutex);
     stato->postazioni_libere[tipo]++;
+
+    if (stato->postazioni_libere[tipo] == stato->postazioni_totali[tipo] && devo_fermarmi() &&
+        (tipo == STAZIONE_PRIMI || tipo == STAZIONE_SECONDI)) {
+
+        int avanzati = 0;
+        int num_piatti = (tipo == STAZIONE_PRIMI) ? stato->primi.num_piatti_oggi : stato->secondi.num_piatti_oggi;
+        int *porzioni  = (tipo == STAZIONE_PRIMI) ? stato->primi.porzioni_disponibili : stato->secondi.porzioni_disponibili;
+
+        for (int i = 0; i < num_piatti; i++) avanzati += porzioni[i];
+
+        stats_record_piatto_avanzato(stats, semid, tipo == STAZIONE_PRIMI ? TIPO_PRIMO : TIPO_SECONDO, avanzati);
+    }
+
     sem_signal_idx(semid, mutex);
     sem_signal_idx(semid, sem_postazioni_di(tipo));
 }
@@ -330,7 +343,7 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
         if (!devo_fermarmi() && pause_fatte < cfg->nof_pause && sim_rand_range(0, 99) < cfg->pause_probability &&
             prova_a_mettersi_in_pausa(semid, stato, tipo)) {
 
-            rilascia_postazione(semid, stato, tipo);
+            rilascia_postazione(semid, stato, stats, tipo);
             postazione_occupata = 0;
             pause_fatte++;
             stats_record_pausa(stats, semid);
@@ -350,7 +363,7 @@ static void giornata_di_servizio(const Config *cfg, int semid, StatoStazioni *st
     if (postazione_occupata) {
         if (tipo == STAZIONE_CASSA) svuota_coda_cassa(mq);
         else svuota_coda_cibo(mq);
-        rilascia_postazione(semid, stato, tipo);
+        rilascia_postazione(semid, stato, stats, tipo);
     }
 }
 

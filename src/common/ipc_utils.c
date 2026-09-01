@@ -100,10 +100,6 @@ void shm_stats_detach(Statistiche *ptr) {
         perror("shmdt statistiche");
 }
 
-void shm_stats_init(Statistiche *stats) {
-    memset(stats, 0, sizeof(*stats));
-}
-
 /* Semafori */
 
 int sem_set_get(int create) {
@@ -152,7 +148,7 @@ void sem_set_init(int semid, const IpcSeatCounts *seats) {
 static void sem_op(int semid, int idx, int delta) {
     struct sembuf op;
     op.sem_num = (unsigned short)idx;
-    op.sem_op  = (short)delta;
+    op.sem_op = (short)delta;
     op.sem_flg = 0;
 
     while (semop(semid, &op, 1) == -1) {
@@ -176,7 +172,7 @@ void sem_signal_idx(int semid, int idx) {
 int sem_wait_idx_intr(int semid, int idx) {
     struct sembuf op;
     op.sem_num = (unsigned short)idx;
-    op.sem_op  = -1;
+    op.sem_op = -1;
     op.sem_flg = 0;
 
     if (semop(semid, &op, 1) == -1) {

@@ -23,6 +23,7 @@ typedef struct {
 } CampoConfig;
 
 /* Rimuove gli spazi iniziali e finali da una stringa. */ 
+
 static void trim(char *s) {
     char *start = s;
 

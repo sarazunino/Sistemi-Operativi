@@ -334,6 +334,7 @@ void stats_export_to_csv(const Statistiche *stats, const char *filepath, int gio
 
     for (int i = 0; i < NUM_STAZIONI; i++)
         fprintf(f, "%.2f,", media(stats->somma_attesa_oggi[i], stats->conteggio_attesa_oggi[i]));
+        
     fprintf(f, "%.2f,", media(stats->somma_attesa_complessiva_oggi, stats->conteggio_attesa_complessivo_oggi));
     fprintf(f, "%.2f,", media(stats->somma_attesa_ticket_oggi, stats->conteggio_attesa_ticket_oggi));
 

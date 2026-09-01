@@ -64,13 +64,6 @@ typedef enum {
 } TipoPiatto;
 
 typedef enum {
-    CAFFE_NORMALE = 0,
-    CAFFE_MACCHIATO,
-    CAFFE_DECAFFEINATO,
-    CAFFE_GINSENG
-} TipoCaffe;
-
-typedef enum {
     ESITO_OK = 0, /* servito il piatto richiesto */
     ESITO_SOSTITUITO, /* piatto richiesto finito, servito un altro dello stesso tipo */
     ESITO_TIPO_ESAURITO /* tutti i piatti di quel tipo sono finiti */

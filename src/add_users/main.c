@@ -23,13 +23,9 @@ int main(int argc, char *argv[]) {
     }
 
     int mq = msgq_addusers_get(0);
-    if (mq == -1) {
-        fprintf(stderr, "add_users: risorse IPC non trovate, la simulazione e' avviata?\n");
-        return EXIT_FAILURE;
-    }
 
     MsgRichiestaAddUsers req;
-    req.mtype    = MSG_ADDUSERS_RICHIESTA;
+    req.mtype = MSG_ADDUSERS_RICHIESTA;
     req.n_utenti = n_new;
 
     if (msgsnd(mq, &req, sizeof(req) - sizeof(long), 0) == -1) {

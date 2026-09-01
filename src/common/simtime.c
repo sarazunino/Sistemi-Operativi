@@ -49,16 +49,3 @@ void sim_sleep_sec(long n_nano_secs, int secondi_simulati) {
         richiesto = rimanente;
     }
 }
-
-int sim_sleep_sec_interrompibile(long n_nano_secs, int secondi_simulati) {
-    if (secondi_simulati < 1) secondi_simulati = 1;
-
-    long totale = (long)secondi_simulati * ns_per_secondo_simulato(n_nano_secs);
-
-    struct timespec richiesto;
-    richiesto.tv_sec  = totale / 1000000000L;
-    richiesto.tv_nsec = totale % 1000000000L;
-
-    if (nanosleep(&richiesto, NULL) == -1) return -1;
-    return 0;
-}

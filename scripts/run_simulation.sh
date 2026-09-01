@@ -15,4 +15,4 @@ CONFIG=${1:-config/config.conf}
 
 echo "Avvio simulazione con $CONFIG..."
 
-./bin/responsabile_mensa "$CONFIG"
+exec ./bin/responsabile_mensa "$CONFIG"

@@ -43,14 +43,4 @@ long sim_minuti_in_ns(long n_nano_secs, int minuti);
  */
 void sim_sleep_sec(long n_nano_secs, int secondi_simulati);
 
-/**
- * @brief Come sim_sleep_sec(), ma interrompibile da un segnale.
- *
- * @param n_nano_secs      Nanosecondi reali per minuto simulato.
- * @param secondi_simulati Durata in secondi simulati.
- * @return 0 se il tempo e' trascorso interamente, -1 se il sonno e' stato
- *         interrotto da un segnale (errno == EINTR).
- */
-int sim_sleep_sec_interrompibile(long n_nano_secs, int secondi_simulati);
-
 #endif /* SIMTIME_H */

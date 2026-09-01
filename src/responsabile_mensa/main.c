@@ -277,19 +277,6 @@ static void refill_se_necessario(int semid, TipoStazione tipo, StatoStazioni *st
     *minuti_al_prossimo_refill = sim_rand_intorno(minuti_refill, cfg->refill_variability_percent);
 }
 
-/* Conteggio delle porzioni rimaste invendute a fine giornata */
-static void registra_piatti_avanzati(Statistiche *stats, int semid, StatoStazioni *stato) {
-    int avanzati_primi = 0, avanzati_secondi = 0;
-
-    for (int i = 0; i < stato->primi.num_piatti_oggi; i++)
-        avanzati_primi += stato->primi.porzioni_disponibili[i];
-    for (int i = 0; i < stato->secondi.num_piatti_oggi; i++)
-        avanzati_secondi += stato->secondi.porzioni_disponibili[i];
-
-    stats_record_piatto_avanzato(stats, semid, TIPO_PRIMO, avanzati_primi);
-    stats_record_piatto_avanzato(stats, semid, TIPO_SECONDO, avanzati_secondi);
-}
-
 /* Monitoraggio dello stato della cassa */
 static void controlla_stato_cassa(int semid, int *cassa_attiva_prec) {
     int valore = sem_getval_idx(semid, SEM_CASSA_ATTIVA);
@@ -330,10 +317,6 @@ int main(int argc, char *argv[]) {
 
     setpgid(0, 0);
     signal(SIGUSR1, SIG_IGN);  
-
-    FILE *pf = fopen("output/responsabile.pid", "w");
-    if (pf) { fprintf(pf, "%d\n", (int)getpid()); fclose(pf); }
-    else    { perror("responsabile: impossibile scrivere output/responsabile.pid"); }
 
     ipc_register_cleanup_on_signal();
 
@@ -421,7 +404,7 @@ int main(int argc, char *argv[]) {
 
         int minuti_refill_base = cfg.avg_refill_time / 60;
         if (minuti_refill_base < 1) minuti_refill_base = 1;
-        int minuti_refill_primi   = sim_rand_intorno(minuti_refill_base, cfg.refill_variability_percent);
+        int minuti_refill_primi = sim_rand_intorno(minuti_refill_base, cfg.refill_variability_percent);
         int minuti_refill_secondi = sim_rand_intorno(minuti_refill_base, cfg.refill_variability_percent);
 
         int n_oggi = leggi_n_children(semid, stato);
@@ -450,7 +433,6 @@ int main(int argc, char *argv[]) {
         killpg(0, SIGUSR1);
         attendi_barriera(semid, n_fine);
 
-        registra_piatti_avanzati(stats, semid, stato);
         msgq_svuota(mq_primi);
         msgq_svuota(mq_secondi);
         msgq_svuota(mq_coffee);

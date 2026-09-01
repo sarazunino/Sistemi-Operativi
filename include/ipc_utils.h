@@ -80,14 +80,6 @@ Statistiche *shm_stats_attach(int shmid);
  */
 void shm_stats_detach(Statistiche *ptr);
 
-/**
- * @brief Inizializza la struttura contenente le statistiche della
- *        simulazione.
- *
- * @param stats Puntatore alla struttura Statistiche.
- */
-void shm_stats_init(Statistiche *stats);
-
 /* --------------------------------------------------------------------
  * Semafori
  * -------------------------------------------------------------------- */

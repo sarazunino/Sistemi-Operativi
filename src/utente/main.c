@@ -427,8 +427,8 @@ int main(int argc, char *argv[]) {
     }
 
     const char *config_path = argv[1];
-    int   capogruppo = atoi(argv[2]);
-    int   num_membri = atoi(argv[3]);
+    int capogruppo = atoi(argv[2]);
+    int num_membri = atoi(argv[3]);
     pid_t capo_pid = (pid_t)atoi(argv[4]);
 
     if (num_membri < 1) num_membri = 1;
@@ -452,7 +452,7 @@ int main(int argc, char *argv[]) {
 
     Ctx c;
     memset(&c, 0, sizeof(c));
-    c.cfg   = &cfg;
+    c.cfg = &cfg;
     c.semid = sem_set_get(0);
     c.stato = shm_stazioni_attach(shm_stazioni_get(0));
     c.stats = shm_stats_attach(shm_stats_get(0));
@@ -464,11 +464,6 @@ int main(int argc, char *argv[]) {
 
     c.ha_ticket = sim_rand_range(0, 99) < cfg.ticket_percentage;
 
-    sigset_t mask_fine, mask_orig;
-    sigemptyset(&mask_fine);
-    sigaddset(&mask_fine, SIGUSR1);
-    sigaddset(&mask_fine, SIGTERM);
-
     sem_signal_idx(c.semid, SEM_BARRIERA_READY);
 
     while (!simulazione_finita) {
@@ -479,11 +474,7 @@ int main(int argc, char *argv[]) {
 
         giornata(&c, capogruppo, num_membri, capo_pid);
 
-        sigprocmask(SIG_BLOCK, &mask_fine, &mask_orig);
         sem_signal_idx(c.semid, SEM_BARRIERA_READY);
-        while (!giorno_finito && !simulazione_finita)
-            sigsuspend(&mask_orig);
-        sigprocmask(SIG_SETMASK, &mask_orig, NULL);
     }
 
     shm_stazioni_detach(c.stato);
